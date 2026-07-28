@@ -1,0 +1,31 @@
+appId: com.playercustom.app
+productName: playerCustom
+directories:
+  buildResources: build
+  output: release/${version}
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintrc,.prettierrc,tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!release/*'
+asarUnpack:
+  - resources/**
+  - '**/*.node'
+  - '**/node_modules/ffmpeg-static/**'
+  - '**/node_modules/ffprobe-static/**'
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: ${name}-${version}-setup.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: ${productName}
+mac:
+  target: [dmg]
+  category: public.app-category.video
+linux:
+  target: [AppImage]
+  category: AudioVideo
