@@ -1,10 +1,21 @@
 import { BrowserWindow, shell } from 'electron'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 
 let mainWindow: BrowserWindow | null = null
 
 export function getMainWindow(): BrowserWindow | null {
   return mainWindow
+}
+
+/**
+ * Icone da janela/taskbar. No app empacotado o icone ja vem embutido no .exe
+ * (electron-builder), entao so precisamos apontar em dev, onde build/ esta na
+ * raiz do projeto (out/main -> ../../build).
+ */
+function resolveIcon(): string | undefined {
+  const devIcon = join(__dirname, '../../build/icon.ico')
+  return existsSync(devIcon) ? devIcon : undefined
 }
 
 export function createWindow(): BrowserWindow {
@@ -16,6 +27,7 @@ export function createWindow(): BrowserWindow {
     show: false,
     backgroundColor: '#0b0d12',
     autoHideMenuBar: true,
+    icon: resolveIcon(),
     // Barra de titulo nativa do sistema: nada e desenhado pelo renderer.
     frame: true,
     webPreferences: {

@@ -13,6 +13,47 @@ export interface AudioTrackInfo {
   enabled: boolean
 }
 
+/**
+ * Preferencia de faixa lembrada ao trocar de episodio. O indice muda entre
+ * arquivos, entao guardamos idioma + codec (audio) e idioma (legenda), que se
+ * mantem estaveis dentro de uma mesma serie.
+ */
+export interface AudioPreference {
+  language: string | null
+  codec: string
+}
+
+export interface SubtitlePreference {
+  language: string | null
+}
+
+/**
+ * Acha no proximo video a faixa de audio equivalente a escolhida. Prioridade:
+ * mesmo idioma + codec, depois so idioma, depois so codec. `null` = usar padrao.
+ */
+function matchAudioTrack(
+  tracks: EmbeddedTrackInfo[],
+  pref: AudioPreference | null
+): EmbeddedTrackInfo | null {
+  if (!pref || tracks.length === 0) return null
+  if (pref.language) {
+    const exact = tracks.find((t) => t.language === pref.language && t.codec === pref.codec)
+    if (exact) return exact
+    const byLanguage = tracks.find((t) => t.language === pref.language)
+    if (byLanguage) return byLanguage
+  }
+  return tracks.find((t) => t.codec === pref.codec) ?? null
+}
+
+/** Acha a legenda de mesmo idioma no proximo video. `null` = nao aplicar. */
+function matchSubtitleTrack(
+  tracks: EmbeddedTrackInfo[],
+  pref: SubtitlePreference | null
+): EmbeddedTrackInfo | null {
+  if (!pref?.language) return null
+  return tracks.find((t) => t.language === pref.language) ?? null
+}
+
 interface PlayerState {
   video: Video | null
   queue: Video[]
@@ -51,6 +92,13 @@ interface PlayerState {
    * sendo o tempo real do video — sem deslocamento a compensar.
    */
   audioTrackIndex: number | null
+
+  /**
+   * Faixas escolhidas manualmente, lembradas ao trocar de episodio na mesma
+   * colecao. Persistem entre videos (nao sao limpas em `open`).
+   */
+  preferredAudio: AudioPreference | null
+  preferredSubtitle: SubtitlePreference | null
 
   attach: (element: HTMLVideoElement | null) => void
   syncFromSettings: () => void
@@ -110,6 +158,114 @@ let pendingSeek: number | null = null
 let lastPersistAt = 0
 const PERSIST_INTERVAL_MS = 4000
 
+/** Qual video esta carregado no elemento atual (null se nenhum ou destacado). */
+let loadedVideoId: string | null = null
+/** Se a midia deve tocar assim que for carregada no elemento. */
+let pendingAutoplay = true
+/** Evita agendar os side-loads (probe/legenda) duas vezes para o mesmo video. */
+let sideLoadsVideoId: string | null = null
+
+/**
+ * play() retorna uma promise que rejeita quando a reproducao e interrompida
+ * antes de comecar — por pause(), load() ou troca de src. Isso e comum ao
+ * trocar de episodio/faixa rapidamente e nao e um erro real (AbortError).
+ * So a falha genuina de midia deve aparecer, e essa vem pelo evento 'error'
+ * do elemento (tratado em onError), nao pela promise de play().
+ */
+function attemptPlay(): void {
+  if (!element) return
+  const promise = element.play()
+  if (!promise) return
+  void promise.catch((error: unknown) => {
+    if (error instanceof Error && error.name === 'AbortError') return
+    // NotAllowedError (autoplay bloqueado) e afins: so refletir que parou.
+    usePlayerStore.setState({ playing: false })
+  })
+}
+
+/**
+ * Carrega a midia do video atual no elemento (respeitando a faixa de audio
+ * remultiplexada, se houver) e agenda os side-loads. Chamado tanto por `open`
+ * quando o player ja esta montado, quanto por `attach` quando o elemento
+ * aparece depois — caso de abrir um video pela tela inicial antes de navegar.
+ */
+function bindMediaToElement(): void {
+  const state = usePlayerStore.getState()
+  const video = state.video
+  if (!element || !video) return
+
+  loadedVideoId = video.id
+  element.src =
+    state.audioTrackIndex !== null
+      ? window.api.files.toAudioTrackUrl(
+          video.path,
+          state.audioTrackIndex,
+          Math.max(0, state.currentTime)
+        )
+      : window.api.files.toMediaUrl(video.path)
+  element.load()
+  if (pendingAutoplay) attemptPlay()
+  scheduleSideLoads(video)
+}
+
+/** probe de faixas + legenda automatica, adiados para depois do primeiro frame. */
+function runSideLoads(video: Video): void {
+  const { getState, setState } = usePlayerStore
+
+  void window.api.tracks
+    .probe(video.path)
+    .then((probe) => {
+      if (getState().video?.id !== video.id) return
+      setState({ embeddedTracks: probe })
+
+      const { preferredAudio, preferredSubtitle } = getState()
+      const matchedAudio = matchAudioTrack(probe.audio, preferredAudio)
+      if (matchedAudio) {
+        getState().selectEmbeddedAudioTrack(matchedAudio)
+      } else {
+        const defaultAudio = probe.audio.find((t) => t.isDefault) ?? probe.audio[0]
+        setState({ activeEmbeddedAudioIndex: defaultAudio?.index ?? null })
+      }
+
+      const matchedSubtitle = matchSubtitleTrack(probe.subtitle, preferredSubtitle)
+      if (matchedSubtitle) void getState().selectEmbeddedSubtitleTrack(matchedSubtitle)
+    })
+    .catch(() => undefined)
+
+  if (useSettingsStore.getState().settings.subtitlesEnabled && getState().preferredSubtitle === null) {
+    void window.api.subtitles
+      .auto(video.path)
+      .then((track) => {
+        if (track && getState().video?.id === video.id && getState().preferredSubtitle === null) {
+          setState({ subtitle: track })
+        }
+      })
+      .catch(() => undefined)
+  }
+}
+
+function scheduleSideLoads(video: Video): void {
+  if (sideLoadsVideoId === video.id) return
+  sideLoadsVideoId = video.id
+
+  let done = false
+  const run = (): void => {
+    if (done) return
+    done = true
+    runSideLoads(video)
+  }
+
+  if (element) {
+    element.addEventListener('playing', run, { once: true })
+    // Se nao comecar a tocar (autoplay bloqueado, erro), roda assim mesmo.
+    setTimeout(() => {
+      if (usePlayerStore.getState().video?.id === video.id) run()
+    }, 4000)
+  } else {
+    run()
+  }
+}
+
 function readAudioTracks(el: HTMLVideoElement): AudioTrackInfo[] {
   const tracks = (el as unknown as { audioTracks?: ArrayLike<Record<string, unknown>> }).audioTracks
   if (!tracks || tracks.length <= 1) return []
@@ -151,14 +307,24 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   extractingSubtitle: false,
 
   audioTrackIndex: null,
+  preferredAudio: null,
+  preferredSubtitle: null,
 
   attach: (el) => {
     element = el
-    if (!el) return
-    const { volume, muted, rate } = get()
+    if (!el) {
+      // Player desmontou: proxima montagem precisa recarregar a midia.
+      loadedVideoId = null
+      return
+    }
+    const { volume, muted, rate, video } = get()
     el.volume = volume
     el.muted = muted
     el.playbackRate = rate
+
+    // Video aberto antes do player montar (ex.: "Continuar assistindo" na tela
+    // inicial): a midia ainda nao foi carregada em nenhum elemento. Carrega.
+    if (video && loadedVideoId !== video.id) bindMediaToElement()
   },
 
   syncFromSettings: () => {
@@ -182,6 +348,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   open: async (video, queue, options) => {
     const current = get().video
     if (current && current.id !== video.id) await get().persistProgress(true)
+
+    // Preferencia de faixa vale dentro da colecao: ao mudar de colecao, zera.
+    const switchedCollection = current !== null && current.collectionId !== video.collectionId
+    if (switchedCollection) {
+      set({ preferredAudio: null, preferredSubtitle: null })
+    }
 
     set({
       video,
@@ -207,60 +379,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         ? 0
         : video.lastPosition
     pendingSeek = resume > 1 ? resume : null
-
-    if (element) {
-      element.src = window.api.files.toMediaUrl(video.path)
-      element.load()
-      if (options?.autoplay !== false) {
-        void element.play().catch(() => set({ playing: false }))
-      }
-    }
+    pendingAutoplay = options?.autoplay !== false
+    loadedVideoId = null
+    sideLoadsVideoId = null
 
     void window.api.settings.update({ lastVideoId: video.id, lastCollectionId: video.collectionId })
 
-    // ffprobe e a busca por legenda so rodam depois que o video ja comecou a
-    // tocar: disputar disco durante a abertura atrasa o inicio da reproducao.
-    // Nada aqui e necessario para o primeiro frame aparecer.
-    let sideLoadsDone = false
-    const deferSideLoads = (): void => {
-      if (sideLoadsDone) return
-      sideLoadsDone = true
-
-      void window.api.tracks
-        .probe(video.path)
-        .then((probe) => {
-          if (get().video?.id !== video.id) return
-          const defaultAudio = probe.audio.find((t) => t.isDefault) ?? probe.audio[0]
-          set({
-            embeddedTracks: probe,
-            activeEmbeddedAudioIndex: defaultAudio?.index ?? null
-          })
-        })
-        .catch(() => undefined)
-
-      if (useSettingsStore.getState().settings.subtitlesEnabled) {
-        void window.api.subtitles
-          .auto(video.path)
-          .then((track) => {
-            if (track && get().video?.id === video.id) set({ subtitle: track })
-          })
-          .catch(() => undefined)
-      }
-    }
-
-    if (element) {
-      element.addEventListener('playing', deferSideLoads, { once: true })
-      // Se a reproducao nao comecar (autoplay: false, erro), roda mesmo assim.
-      setTimeout(() => {
-        if (get().video?.id === video.id) deferSideLoads()
-      }, 4000)
-    } else {
-      deferSideLoads()
-    }
+    // Se o player ja esta montado, carrega agora. Se nao (aberto pela tela
+    // inicial), `attach` carrega quando o elemento aparecer.
+    if (element) bindMediaToElement()
   },
 
   close: () => {
     void get().persistProgress(true)
+    loadedVideoId = null
+    sideLoadsVideoId = null
     if (element) {
       element.pause()
       element.removeAttribute('src')
@@ -278,11 +411,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     })
   },
 
-  play: () => {
-    void element?.play().catch((error: unknown) => {
-      set({ status: 'error', error: error instanceof Error ? error.message : String(error) })
-    })
-  },
+  play: () => attemptPlay(),
   pause: () => {
     element?.pause()
     void get().persistProgress(true)
@@ -300,9 +429,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // reporta o tempo real assim que carrega (pode ser o keyframe anterior).
     if (audioTrackIndex !== null && video) {
       set({ currentTime: target, status: 'loading' })
+      loadedVideoId = video.id
       element.src = window.api.files.toAudioTrackUrl(video.path, audioTrackIndex, target)
       element.load()
-      if (playing) void element.play().catch(() => set({ playing: false }))
+      if (playing) attemptPlay()
       return
     }
 
@@ -447,7 +577,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       toast.error(error)
     }
   },
-  clearSubtitle: () => set({ subtitle: null }),
+  clearSubtitle: () =>
+    set({ subtitle: null, activeEmbeddedSubtitleIndex: null, preferredSubtitle: null }),
   toggleSubtitles: () => {
     const subtitlesEnabled = !get().subtitlesEnabled
     set({ subtitlesEnabled })
@@ -478,15 +609,18 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set({
       activeEmbeddedAudioIndex: track.index,
       audioTrackIndex: track.index,
+      // Lembra a escolha para os proximos episodios da colecao.
+      preferredAudio: { language: track.language, codec: track.codec },
       currentTime: startAt,
       status: 'loading',
       error: null
     })
 
+    loadedVideoId = video.id
     element.src = window.api.files.toAudioTrackUrl(video.path, track.index, startAt)
     element.load()
     // Trocar faixa e uma acao explicita: sempre retoma a reproducao.
-    void element.play().catch(() => set({ playing: false }))
+    attemptPlay()
   },
 
   resetAudioTrack: () => {
@@ -497,19 +631,27 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set({
       audioTrackIndex: null,
       activeEmbeddedAudioIndex: null,
+      // Voltar ao padrao tambem cancela a preferencia entre episodios.
+      preferredAudio: null,
       currentTime: resume,
       status: 'loading'
     })
     pendingSeek = resume > 1 ? resume : null
+    loadedVideoId = video.id
     element.src = window.api.files.toMediaUrl(video.path)
     element.load()
-    if (playing) void element.play().catch(() => set({ playing: false }))
+    if (playing) attemptPlay()
   },
 
   selectEmbeddedSubtitleTrack: async (track) => {
     const { video } = get()
     if (!video) return
-    set({ extractingSubtitle: true, activeEmbeddedSubtitleIndex: track.index })
+    set({
+      extractingSubtitle: true,
+      activeEmbeddedSubtitleIndex: track.index,
+      // Lembra o idioma da legenda para os proximos episodios.
+      preferredSubtitle: { language: track.language }
+    })
     try {
       const path = await window.api.tracks.extractSubtitle(video.path, track.index)
       if (get().video?.id !== video.id) return
@@ -517,7 +659,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         toast.error(
           new Error('Nao foi possivel extrair esta legenda (provavelmente e uma legenda de imagem).')
         )
-        set({ activeEmbeddedSubtitleIndex: null })
+        set({ activeEmbeddedSubtitleIndex: null, preferredSubtitle: null })
         return
       }
       await get().loadSubtitle(path)

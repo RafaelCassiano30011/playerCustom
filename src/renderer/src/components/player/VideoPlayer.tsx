@@ -23,7 +23,7 @@ function readAudioTracks(el: HTMLVideoElement): AudioTrackInfo[] {
 }
 
 export function VideoPlayer(): JSX.Element {
-  const videoRef = useRef<HTMLVideoElement>(null)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const stageRef = useRef<HTMLDivElement>(null)
 
@@ -45,10 +45,17 @@ export function VideoPlayer(): JSX.Element {
   const togglePlay = usePlayerStore((s) => s.togglePlay)
   const persistProgress = usePlayerStore((s) => s.persistProgress)
 
-  useEffect(() => {
-    attach(videoRef.current)
-    return () => attach(null)
-  }, [attach])
+  // Callback ref em vez de useEffect: o elemento <video> so e montado quando
+  // ha um video (fora isso mostra placeholder). O callback dispara na hora
+  // exata em que o <video> aparece/some, garantindo que o store receba o
+  // elemento mesmo quando ele surge depois do primeiro render.
+  const setVideoRef = useCallback(
+    (el: HTMLVideoElement | null) => {
+      videoRef.current = el
+      attach(el)
+    },
+    [attach]
+  )
 
   // Salva progresso periodicamente mesmo sem novos timeupdate (ex.: pausado parado).
   useEffect(() => {
@@ -110,7 +117,7 @@ export function VideoPlayer(): JSX.Element {
     >
       <div className="player__stage" ref={stageRef} onDoubleClick={handleDoubleClick}>
         <video
-          ref={videoRef}
+          ref={setVideoRef}
           className="player__video"
           onClick={handleStageClick}
           onTimeUpdate={(e) => {

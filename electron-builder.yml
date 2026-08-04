@@ -18,14 +18,19 @@ win:
   target:
     - target: nsis
       arch: [x64]
+  icon: build/icon.ico
   artifactName: ${name}-${version}-setup.${ext}
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   shortcutName: ${productName}
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
 mac:
   target: [dmg]
+  icon: build/icon.png
   category: public.app-category.video
 linux:
   target: [AppImage]
+  icon: build/icon.png
   category: AudioVideo
