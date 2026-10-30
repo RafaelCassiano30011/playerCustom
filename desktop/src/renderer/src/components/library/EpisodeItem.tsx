@@ -1,6 +1,16 @@
 import { memo } from 'react'
-import { CheckCircle2, Film, GripVertical, Heart, MoreVertical, Play } from 'lucide-react'
-import type { Video } from '@shared/types'
+import {
+  CheckCircle2,
+  CloudDownload,
+  Film,
+  GripVertical,
+  Heart,
+  HardDriveDownload,
+  MoreVertical,
+  Play,
+  X
+} from 'lucide-react'
+import type { DownloadProgress, Video } from '@shared/types'
 import { formatTime } from '@shared/time'
 import { mediaUrl, videoProgress } from '@/lib/media'
 import { MenuItem, PlayerMenu } from '@/components/player/PlayerMenu'
@@ -12,6 +22,11 @@ interface EpisodeItemProps {
   active: boolean
   dragOver: 'before' | 'after' | null
   autoThumbnails: boolean
+  /** Download em andamento deste episodio, quando houver. */
+  download: DownloadProgress | null
+  onDownload: () => void
+  onCancelDownload: () => void
+  onRemoveOffline: () => void
   onPlay: () => void
   onToggleFavorite: () => void
   onResetProgress: () => void
@@ -34,6 +49,10 @@ function EpisodeItemImpl({
   active,
   dragOver,
   autoThumbnails,
+  download,
+  onDownload,
+  onCancelDownload,
+  onRemoveOffline,
   onPlay,
   onToggleFavorite,
   onResetProgress,
@@ -57,6 +76,11 @@ function EpisodeItemImpl({
     .join(' ')
 
   const thumbRef = useThumbnailOnVisible(video, autoThumbnails)
+
+  const naNuvem = video.source === 'cloud'
+  const offline = video.offlinePath !== null
+  const baixando = download?.state === 'downloading'
+  const percentual = baixando ? Math.round((download?.fraction ?? 0) * 100) : 0
 
   return (
     <div
@@ -101,6 +125,20 @@ function EpisodeItemImpl({
             </span>
           )}
           {video.status === 'in_progress' && <span className="badge badge--progress">Em andamento</span>}
+          {baixando && <span className="badge badge--progress">Baixando {percentual}%</span>}
+          {naNuvem && !baixando && (
+            <span className="badge" title={offline ? 'Disponivel offline' : 'Toca por streaming'}>
+              {offline ? (
+                <>
+                  <HardDriveDownload size={11} /> Offline
+                </>
+              ) : (
+                <>
+                  <CloudDownload size={11} /> Nuvem
+                </>
+              )}
+            </span>
+          )}
         </span>
       </div>
 
@@ -113,6 +151,26 @@ function EpisodeItemImpl({
         >
           <Heart size={15} fill={video.favorite ? 'currentColor' : 'none'} />
         </button>
+        {naNuvem && !offline && !baixando && (
+          <button
+            className="icon-btn"
+            onClick={onDownload}
+            aria-label="Baixar para assistir offline"
+            title="Baixar para assistir offline"
+          >
+            <CloudDownload size={15} />
+          </button>
+        )}
+        {baixando && (
+          <button
+            className="icon-btn"
+            onClick={onCancelDownload}
+            aria-label="Cancelar download"
+            title={`Cancelar download (${percentual}%)`}
+          >
+            <X size={15} />
+          </button>
+        )}
         <button className="icon-btn" onClick={onPlay} aria-label="Reproduzir" title="Reproduzir">
           <Play size={15} />
         </button>
@@ -145,6 +203,15 @@ function EpisodeItemImpl({
                   label="Reiniciar progresso"
                   onClick={() => {
                     onResetProgress()
+                    close()
+                  }}
+                />
+              )}
+              {naNuvem && offline && (
+                <MenuItem
+                  label="Remover copia offline"
+                  onClick={() => {
+                    onRemoveOffline()
                     close()
                   }}
                 />

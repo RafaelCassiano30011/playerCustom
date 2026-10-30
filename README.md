@@ -17,12 +17,12 @@ O `server/` exige **Node 18+** (o `wrangler` não roda em Node 14).
 
 ## Estado
 
-- O player lê os vídeos do disco local (`desktop/src/main/services/file.service.ts`).
+- O player toca vídeo do disco local e **da nuvem**, por streaming ou por cópia
+  baixada, e sincroniza o progresso com o servidor.
 - O `server/` está **publicado** em
   `https://playercustom-api.player-d22.workers.dev` (conta Cloudflare Player),
-  com D1 e R2 criados e o fluxo de upload/streaming testado de ponta a ponta.
-- **O player ainda não fala com ele**: falta o cliente de API no `main` (upload
-  com `ffprobe`, catálogo, progresso) e o app de Android TV.
+  com D1 e R2 criados.
+- Falta o app de Android TV.
 
 ## Biblioteca na nuvem
 
@@ -30,3 +30,31 @@ O `server/` guarda o catálogo no D1 e os arquivos no R2, e entrega os bytes por
 link assinado (`/stream/:id?token=...`) para o player da TV poder dar seek sem
 mandar header de autorização. Detalhes, endpoints e decisões estão em
 [`server/README.md`](server/README.md).
+
+### Como o player usa
+
+Entre com e-mail e senha em **Ajustes › Biblioteca na nuvem**. A sessão fica em
+`cloud-session.json`, cifrada pelo `safeStorage` do sistema (DPAPI no Windows).
+
+- **Enviar**: com a sessão ativa, o botão *Enviar para a nuvem* na barra de
+  importação sobe os arquivos em partes de 64 MiB; a duração vai junto, lida
+  pelo `ffprobe`.
+- **Sincronizar**: a cada poucos minutos (ou no botão *Sincronizar*) o app
+  espelha coleções, episódios, progresso e exclusões no `library.json` local.
+  O arquivo local é a fonte de verdade da interface, então **nenhuma tela
+  precisa de "modo offline"** — sem rede, só não entra nada novo.
+- **Assistir por streaming**: o `<video>` carrega `media://cloud/<id>`. O
+  processo principal pede o link assinado, busca os bytes e repassa o `Range`,
+  então o token nunca chega ao renderer e o seek continua funcionando.
+- **Assistir offline**: o botão de download grava o arquivo em
+  `offline/` dentro do `userData`, retomando de onde parou se a rede cair. Com
+  a cópia no disco, ela ganha do streaming mesmo com internet. *Remover cópia
+  offline* apaga o arquivo e mantém o vídeo na nuvem.
+- **Progresso**: cada posição é salva no `library.json` na hora e entra numa
+  fila persistida. A fila sobe quando dá, e sobrevive a fechar o app. O
+  servidor resolve conflito por `updatedAt` (last-write-wins); quando a posição
+  remota é mais nova, o app adota a do servidor.
+
+Streaming não lê faixas de áudio nem legendas embutidas: isso depende do
+`ffprobe` abrindo o arquivo. Quem quiser trocar faixa ou extrair legenda baixa
+o episódio.

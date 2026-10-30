@@ -1,16 +1,28 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { IPC, toAudioTrackUrl, toMediaUrl } from '@shared/ipc'
+import { IPC, toAudioTrackUrl, toCloudUrl, toMediaUrl } from '@shared/ipc'
 import type { RendererApi } from '@shared/ipc'
 import type {
   ApplyCollectionDefaultsInput,
   AppSettings,
+  CloudCredentials,
+  CloudStatus,
+  CloudUploadInput,
   CreateCollectionInput,
+  DownloadProgress,
   ImportVideosInput,
   ReorderInput,
   SaveProgressInput,
   UpdateCollectionInput,
-  UpdateVideoInput
+  UpdateVideoInput,
+  UploadProgress
 } from '@shared/types'
+
+/** Assina um canal de eventos e devolve a funcao que cancela a assinatura. */
+function subscribe<T>(channel: string, handler: (payload: T) => void): () => void {
+  const listener = (_event: unknown, payload: T): void => handler(payload)
+  ipcRenderer.on(channel, listener)
+  return () => ipcRenderer.removeListener(channel, listener)
+}
 
 const invoke = ipcRenderer.invoke.bind(ipcRenderer)
 
@@ -66,8 +78,28 @@ const api: RendererApi = {
   files: {
     resolve: (paths: string[]) => invoke(IPC.filesResolve, paths),
     toMediaUrl,
-    toAudioTrackUrl
+    toAudioTrackUrl,
+    toCloudUrl
   },
+  cloud: {
+    status: () => invoke(IPC.cloudStatus),
+    login: (input: CloudCredentials) => invoke(IPC.cloudLogin, input),
+    register: (input: CloudCredentials) => invoke(IPC.cloudRegister, input),
+    logout: () => invoke(IPC.cloudLogout),
+    sync: () => invoke(IPC.cloudSync),
+    upload: (input: CloudUploadInput) => invoke(IPC.cloudUpload, input),
+    download: (videoId: string) => invoke(IPC.cloudDownload, videoId),
+    cancelDownload: (videoId: string) => invoke(IPC.cloudCancelDownload, videoId),
+    removeOffline: (videoId: string) => invoke(IPC.cloudRemoveOffline, videoId),
+    downloads: () => invoke(IPC.cloudDownloads),
+    onStatus: (handler: (status: CloudStatus) => void) =>
+      subscribe<CloudStatus>(IPC.eventCloudStatus, handler),
+    onDownload: (handler: (progress: DownloadProgress) => void) =>
+      subscribe<DownloadProgress>(IPC.eventCloudDownload, handler),
+    onUpload: (handler: (progress: UploadProgress) => void) =>
+      subscribe<UploadProgress>(IPC.eventCloudUpload, handler)
+  },
+  onLibraryChanged: (handler: () => void) => subscribe<void>(IPC.eventLibraryChanged, handler),
   window: {
     minimize: () => ipcRenderer.send(IPC.windowMinimize),
     maximize: () => ipcRenderer.send(IPC.windowMaximize),

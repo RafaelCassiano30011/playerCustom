@@ -7,6 +7,8 @@ import {
 import type {
   ApplyCollectionDefaultsInput,
   AppSettings,
+  CloudCredentials,
+  CloudUploadInput,
   CreateCollectionInput,
   ImportVideosInput,
   ReorderInput,
@@ -24,6 +26,7 @@ import { subtitleService } from '../services/subtitle.service'
 import { thumbnailService } from '../services/thumbnail.service'
 import { extractSubtitleTrack, probeTracks } from '../services/track.service'
 import { getMainWindow } from '../window'
+import * as cloud from '../cloud'
 
 /** Envolve handlers para que erros virem rejeicoes legiveis no renderer. */
 function handle<T>(channel: string, fn: (...args: never[]) => T | Promise<T>): void {
@@ -72,7 +75,8 @@ export function registerIpcHandlers(): void {
     videoRepository.move(collectionId, videoId, direction)
   )
   handle(IPC.videosSaveProgress, (input: SaveProgressInput) => {
-    const video = videoRepository.saveProgress(input)
+    // Grava local e, se o video vive na nuvem, enfileira o envio da posicao.
+    const video = cloud.saveProgress(input)
     historyRepository.record(video.id, video.collectionId, video.lastPosition)
     return video
   })
@@ -162,6 +166,24 @@ export function registerIpcHandlers(): void {
     })
     return result.canceled ? null : (result.filePaths[0] ?? null)
   })
+
+  /* ---------- Nuvem ---------- */
+  handle(IPC.cloudStatus, () => cloud.status())
+  handle(IPC.cloudLogin, ({ email, password }: CloudCredentials) =>
+    cloud.signInExisting(email, password)
+  )
+  handle(IPC.cloudRegister, ({ email, password }: CloudCredentials) =>
+    cloud.signUp(email, password)
+  )
+  handle(IPC.cloudLogout, () => cloud.signOut())
+  handle(IPC.cloudSync, () => cloud.sync(true))
+  handle(IPC.cloudUpload, ({ collectionId, paths }: CloudUploadInput) =>
+    cloud.upload(collectionId, paths)
+  )
+  handle(IPC.cloudDownload, (videoId: string) => cloud.download(videoId))
+  handle(IPC.cloudCancelDownload, (videoId: string) => cloud.cancelDownload(videoId))
+  handle(IPC.cloudRemoveOffline, (videoId: string) => cloud.removeOffline(videoId))
+  handle(IPC.cloudDownloads, () => cloud.activeDownloads())
 
   /* ---------- Legendas e arquivos ---------- */
   handle(IPC.subtitleLoad, (path: string) => subtitleService.load(path))

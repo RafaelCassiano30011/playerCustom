@@ -136,6 +136,10 @@ ol {
   }
 }
 
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

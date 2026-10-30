@@ -158,6 +158,34 @@ let pendingSeek: number | null = null
 let lastPersistAt = 0
 const PERSIST_INTERVAL_MS = 4000
 
+/**
+ * Caminho do arquivo em disco, ou string vazia quando o video so existe na
+ * nuvem. A copia baixada ganha da origem: assistir offline e sempre melhor
+ * que gastar banda, mesmo com a internet funcionando.
+ */
+function localPathOf(video: Video): string {
+  if (video.offlinePath) return video.offlinePath
+  return video.source === 'local' ? video.path : ''
+}
+
+/**
+ * URL que o elemento `<video>` carrega.
+ *
+ * Arquivo em disco vai por `media://<caminho>`; video so na nuvem vai por
+ * `media://cloud/<id>`, que o processo principal resolve em link assinado e
+ * repassa com Range. As duas formas aceitam seek, entao o resto do player nao
+ * precisa distinguir streaming de local.
+ */
+function mediaSourceFor(video: Video, audioTrackIndex: number | null, at: number): string {
+  const path = localPathOf(video)
+  if (path) {
+    return audioTrackIndex !== null
+      ? window.api.files.toAudioTrackUrl(path, audioTrackIndex, Math.max(0, at))
+      : window.api.files.toMediaUrl(path)
+  }
+  return video.remoteId ? window.api.files.toCloudUrl(video.remoteId) : ''
+}
+
 /** Qual video esta carregado no elemento atual (null se nenhum ou destacado). */
 let loadedVideoId: string | null = null
 /** Se a midia deve tocar assim que for carregada no elemento. */
@@ -195,25 +223,37 @@ function bindMediaToElement(): void {
   if (!element || !video) return
 
   loadedVideoId = video.id
-  element.src =
-    state.audioTrackIndex !== null
-      ? window.api.files.toAudioTrackUrl(
-          video.path,
-          state.audioTrackIndex,
-          Math.max(0, state.currentTime)
-        )
-      : window.api.files.toMediaUrl(video.path)
+  const src = mediaSourceFor(video, state.audioTrackIndex, state.currentTime)
+  if (!src) {
+    usePlayerStore.setState({
+      status: 'error',
+      error: 'Este video nao esta disponivel: sem copia local e sem vinculo com a nuvem.'
+    })
+    return
+  }
+  element.src = src
   element.load()
   if (pendingAutoplay) attemptPlay()
   scheduleSideLoads(video)
 }
 
-/** probe de faixas + legenda automatica, adiados para depois do primeiro frame. */
+/**
+ * probe de faixas + legenda automatica, adiados para depois do primeiro frame.
+ *
+ * Os dois dependem do ffprobe lendo o arquivo no disco. Em streaming nao ha
+ * arquivo: o player fica com a faixa padrao do container e sem legenda
+ * externa, e quem quiser as faixas baixa o episodio.
+ */
 function runSideLoads(video: Video): void {
   const { getState, setState } = usePlayerStore
+  const path = localPathOf(video)
+  if (!path) {
+    setState({ embeddedTracks: { audio: [], subtitle: [] } })
+    return
+  }
 
   void window.api.tracks
-    .probe(video.path)
+    .probe(path)
     .then((probe) => {
       if (getState().video?.id !== video.id) return
       setState({ embeddedTracks: probe })
@@ -234,7 +274,7 @@ function runSideLoads(video: Video): void {
 
   if (useSettingsStore.getState().settings.subtitlesEnabled && getState().preferredSubtitle === null) {
     void window.api.subtitles
-      .auto(video.path)
+      .auto(path)
       .then((track) => {
         if (track && getState().video?.id === video.id && getState().preferredSubtitle === null) {
           setState({ subtitle: track })
@@ -430,7 +470,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (audioTrackIndex !== null && video) {
       set({ currentTime: target, status: 'loading' })
       loadedVideoId = video.id
-      element.src = window.api.files.toAudioTrackUrl(video.path, audioTrackIndex, target)
+      element.src = window.api.files.toAudioTrackUrl(localPathOf(video), audioTrackIndex, target)
       element.load()
       if (playing) attemptPlay()
       return
@@ -604,6 +644,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   selectEmbeddedAudioTrack: (track) => {
     const { video, currentTime } = get()
     if (!video || !element) return
+    // remux exige o arquivo em disco; em streaming nao ha o que remultiplexar
+    const path = localPathOf(video)
+    if (!path) return
 
     const startAt = Math.max(0, currentTime)
     set({
@@ -617,7 +660,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     })
 
     loadedVideoId = video.id
-    element.src = window.api.files.toAudioTrackUrl(video.path, track.index, startAt)
+    element.src = window.api.files.toAudioTrackUrl(path, track.index, startAt)
     element.load()
     // Trocar faixa e uma acao explicita: sempre retoma a reproducao.
     attemptPlay()
@@ -638,7 +681,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     })
     pendingSeek = resume > 1 ? resume : null
     loadedVideoId = video.id
-    element.src = window.api.files.toMediaUrl(video.path)
+    element.src = mediaSourceFor(video, null, resume)
     element.load()
     if (playing) attemptPlay()
   },
@@ -653,7 +696,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       preferredSubtitle: { language: track.language }
     })
     try {
-      const path = await window.api.tracks.extractSubtitle(video.path, track.index)
+      const path = await window.api.tracks.extractSubtitle(localPathOf(video), track.index)
       if (get().video?.id !== video.id) return
       if (!path) {
         toast.error(

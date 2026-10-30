@@ -40,6 +40,137 @@ export const videoRepository = {
     return video ? { ...video } : null
   },
 
+  findByRemote(remoteId: string): Video | null {
+    const video = db().videos.find((v) => v.remoteId === remoteId)
+    return video ? { ...video } : null
+  },
+
+  /** Todos os videos da nuvem, para o sync saber o que sobrou. */
+  remoteIds(): string[] {
+    return db()
+      .videos.map((v) => v.remoteId)
+      .filter((id): id is string => id !== null)
+  },
+
+  /**
+   * Cria ou atualiza o video espelhado de um arquivo do servidor.
+   *
+   * `path` fica vazio enquanto o video so existe na nuvem: quem resolve a
+   * midia e o player, que prefere `offlinePath` e cai para o streaming.
+   * Campos que o usuario ajusta no app (abertura, favorito, progresso) nunca
+   * sao sobrescritos pelo sync.
+   */
+  upsertRemote(input: {
+    remoteId: string
+    collectionId: string
+    name: string
+    duration: number
+    sizeBytes: number
+    position: number
+  }): Video {
+    return mutate((state) => {
+      const now = Date.now()
+      const existente = state.videos.find((v) => v.remoteId === input.remoteId)
+
+      if (existente) {
+        existente.collectionId = input.collectionId
+        existente.name = input.name
+        if (input.duration > 0) existente.duration = input.duration
+        if (input.sizeBytes > 0) existente.sizeBytes = input.sizeBytes
+        existente.position = input.position
+        existente.source = 'cloud'
+        existente.updatedAt = now
+        return { ...existente }
+      }
+
+      const video: Video = {
+        id: randomUUID(),
+        collectionId: input.collectionId,
+        name: input.name,
+        path: '',
+        duration: input.duration,
+        thumbnail: null,
+        introStart: null,
+        introEnd: null,
+        introSkipTo: null,
+        nextEpisodeOffset: state.settings.defaultNextEpisodeOffset,
+        position: input.position,
+        status: 'not_started',
+        lastPosition: 0,
+        favorite: false,
+        lastPlayedAt: null,
+        source: 'cloud',
+        remoteId: input.remoteId,
+        sizeBytes: input.sizeBytes,
+        offlinePath: null,
+        createdAt: now,
+        updatedAt: now
+      }
+      state.videos.push(video)
+      return { ...video }
+    })
+  },
+
+  /** Marca (ou limpa) a copia baixada para assistir offline. */
+  setOfflinePath(id: string, offlinePath: string | null): Video {
+    return mutate((state) => {
+      const video = state.videos.find((v) => v.id === id)
+      if (!video) throw new Error(`Video ${id} nao encontrado.`)
+      video.offlinePath = offlinePath
+      video.updatedAt = Date.now()
+      return { ...video }
+    })
+  },
+
+  /**
+   * Aplica uma posicao vinda do servidor.
+   *
+   * Last-write-wins pelo `updatedAt`: posicao remota mais velha que a local e
+   * descartada, senao a TV com relogio atrasado rebobinaria o que foi visto
+   * aqui. Devolve `null` quando nada mudou — o sync usa isso para contar.
+   */
+  applyRemoteProgress(input: {
+    remoteId: string
+    positionSeconds: number
+    durationSeconds: number
+    completed: boolean
+    updatedAt: number
+  }): Video | null {
+    return mutate((state) => {
+      const video = state.videos.find((v) => v.remoteId === input.remoteId)
+      if (!video) return null
+      if (input.updatedAt <= video.updatedAt) return null
+
+      video.lastPosition = Math.max(0, input.positionSeconds)
+      if (input.durationSeconds > 0) video.duration = input.durationSeconds
+      video.status = input.completed
+        ? 'completed'
+        : video.lastPosition > 1
+          ? 'in_progress'
+          : video.status
+      video.lastPlayedAt = input.updatedAt
+      video.updatedAt = input.updatedAt
+      return { ...video }
+    })
+  },
+
+  /** Remove os videos da nuvem que nao existem mais no servidor. */
+  removeRemotes(remoteIds: string[]): number {
+    const alvo = new Set(remoteIds)
+    if (alvo.size === 0) return 0
+    return mutate((state) => {
+      const antes = state.videos.length
+      const removidos = state.videos.filter((v) => v.remoteId && alvo.has(v.remoteId))
+      const ids = new Set(removidos.map((v) => v.id))
+      state.videos = state.videos.filter((v) => !ids.has(v.id))
+      state.history = state.history.filter((h) => !ids.has(h.videoId))
+      if (state.settings.lastVideoId && ids.has(state.settings.lastVideoId)) {
+        state.settings.lastVideoId = null
+      }
+      return antes - state.videos.length
+    })
+  },
+
   /** Ignora caminhos ja presentes na colecao (indice unico logico). */
   importMany(collectionId: string, paths: string[]): Video[] {
     return mutate((state) => {
@@ -71,6 +202,10 @@ export const videoRepository = {
           lastPosition: 0,
           favorite: false,
           lastPlayedAt: null,
+          source: 'local',
+          remoteId: null,
+          sizeBytes: 0,
+          offlinePath: null,
           createdAt: now,
           updatedAt: now
         }

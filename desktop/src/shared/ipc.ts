@@ -1,9 +1,14 @@
 import type {
   ApplyCollectionDefaultsInput,
   AppSettings,
+  CloudCredentials,
+  CloudStatus,
+  CloudSyncResult,
+  CloudUploadInput,
   Collection,
   CollectionWithStats,
   CreateCollectionInput,
+  DownloadProgress,
   HistoryEntry,
   ImportVideosInput,
   MediaFileInfo,
@@ -14,6 +19,7 @@ import type {
   SubtitleTrack,
   UpdateCollectionInput,
   UpdateVideoInput,
+  UploadProgress,
   Video
 } from './types'
 
@@ -61,12 +67,27 @@ export const IPC = {
 
   filesResolve: 'files:resolve',
 
+  cloudStatus: 'cloud:status',
+  cloudLogin: 'cloud:login',
+  cloudRegister: 'cloud:register',
+  cloudLogout: 'cloud:logout',
+  cloudSync: 'cloud:sync',
+  cloudUpload: 'cloud:upload',
+  cloudDownload: 'cloud:download',
+  cloudCancelDownload: 'cloud:cancelDownload',
+  cloudRemoveOffline: 'cloud:removeOffline',
+  cloudDownloads: 'cloud:downloads',
+
   windowMinimize: 'window:minimize',
   windowMaximize: 'window:maximize',
   windowClose: 'window:close',
   windowSetFullscreen: 'window:setFullscreen',
 
-  eventFilesDropped: 'event:filesDropped'
+  eventFilesDropped: 'event:filesDropped',
+  eventCloudStatus: 'event:cloudStatus',
+  eventCloudDownload: 'event:cloudDownload',
+  eventCloudUpload: 'event:cloudUpload',
+  eventLibraryChanged: 'event:libraryChanged'
 } as const
 
 /** Superficie exposta em `window.api`. */
@@ -127,7 +148,31 @@ export interface RendererApi {
     toMediaUrl(path: string): string
     /** URL que remultiplexa o arquivo com a faixa de audio escolhida. */
     toAudioTrackUrl(path: string, audioStreamIndex: number, startSeconds: number): string
+    /** URL que faz o main buscar os bytes na nuvem (streaming). */
+    toCloudUrl(remoteId: string): string
   }
+  cloud: {
+    status(): Promise<CloudStatus>
+    login(input: CloudCredentials): Promise<CloudStatus>
+    register(input: CloudCredentials): Promise<CloudStatus>
+    logout(): Promise<CloudStatus>
+    /** Puxa catalogo e progresso, e envia o que estava na fila. */
+    sync(): Promise<CloudSyncResult>
+    /** Envia arquivos locais para a colecao na nuvem. */
+    upload(input: CloudUploadInput): Promise<Video[]>
+    /** Baixa para assistir offline. Retoma de onde parou. */
+    download(videoId: string): Promise<DownloadProgress>
+    cancelDownload(videoId: string): Promise<void>
+    /** Apaga a copia local; o video continua na nuvem. */
+    removeOffline(videoId: string): Promise<Video>
+    /** Downloads em andamento (para a UI se recuperar ao remontar). */
+    downloads(): Promise<DownloadProgress[]>
+    onStatus(handler: (status: CloudStatus) => void): () => void
+    onDownload(handler: (progress: DownloadProgress) => void): () => void
+    onUpload(handler: (progress: UploadProgress) => void): () => void
+  }
+  /** O main mexeu na biblioteca (sync, upload, download): recarregar. */
+  onLibraryChanged(handler: () => void): () => void
   window: {
     minimize(): void
     maximize(): void
@@ -138,6 +183,17 @@ export interface RendererApi {
 }
 
 export const MEDIA_SCHEME = 'media'
+
+/**
+ * Prefixo das URLs de video que vivem na nuvem. O handler do protocolo
+ * reconhece o prefixo, pede um link assinado e repassa os bytes (com Range),
+ * de modo que o token nunca chega ao renderer.
+ */
+export const CLOUD_PREFIX = 'cloud/'
+
+export function toCloudUrl(remoteId: string): string {
+  return `${MEDIA_SCHEME}://${CLOUD_PREFIX}${encodeURIComponent(remoteId)}`
+}
 
 export function toMediaUrl(absolutePath: string): string {
   return `${MEDIA_SCHEME}://${encodeURIComponent(absolutePath)}`

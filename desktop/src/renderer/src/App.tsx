@@ -3,6 +3,7 @@ import { UploadCloud } from 'lucide-react'
 import { useLibraryStore } from '@/store/library.store'
 import { useSettingsStore } from '@/store/settings.store'
 import { usePlayerStore } from '@/store/player.store'
+import { useCloudStore } from '@/store/cloud.store'
 import { useFileDrop } from '@/hooks/useFileDrop'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { ToastStack } from '@/components/common/ToastStack'
@@ -26,6 +27,7 @@ export default function App(): JSX.Element {
   const loadCollections = useLibraryStore((s) => s.loadCollections)
   const importVideos = useLibraryStore((s) => s.importVideos)
   const loadSettings = useSettingsStore((s) => s.load)
+  const initCloud = useCloudStore((s) => s.init)
   const syncFromSettings = usePlayerStore((s) => s.syncFromSettings)
   const fullscreen = usePlayerStore((s) => s.fullscreen)
 
@@ -37,6 +39,8 @@ export default function App(): JSX.Element {
       await loadSettings()
       syncFromSettings()
       await loadCollections()
+      // depois da biblioteca: o status da nuvem so decora a tela, nao atrasa
+      void initCloud()
       setReady(true)
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps

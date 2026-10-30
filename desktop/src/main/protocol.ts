@@ -2,8 +2,9 @@ import { protocol } from 'electron'
 import { createReadStream, promises as fs } from 'node:fs'
 import { extname } from 'node:path'
 import { Readable } from 'node:stream'
-import { MEDIA_SCHEME } from '@shared/ipc'
+import { CLOUD_PREFIX, MEDIA_SCHEME } from '@shared/ipc'
 import { streamWithAudioTrack } from './services/transcode.service'
+import { proxyStream } from './cloud'
 
 const MIME: Record<string, string> = {
   mp4: 'video/mp4',
@@ -57,7 +58,27 @@ export function registerMediaProtocol(): void {
     const raw = request.url.slice(`${MEDIA_SCHEME}://`.length)
     const queryAt = raw.indexOf('?')
     const params = new URLSearchParams(queryAt >= 0 ? raw.slice(queryAt + 1) : '')
-    const path = decodeURIComponent(queryAt >= 0 ? raw.slice(0, queryAt) : raw).replace(/\/$/, '')
+    const alvo = queryAt >= 0 ? raw.slice(0, queryAt) : raw
+
+    /**
+     * Video que vive na nuvem: o main pede o link assinado e repassa os bytes,
+     * com o Range do elemento. Para o `<video>` nada muda — mesma origem,
+     * mesmo 206 — e o token de streaming nunca chega ao renderer.
+     */
+    if (alvo.startsWith(CLOUD_PREFIX)) {
+      const remoteId = decodeURIComponent(alvo.slice(CLOUD_PREFIX.length)).replace(/\/$/, '')
+      if (!remoteId) return new Response('Id ausente', { status: 400 })
+      try {
+        return await proxyStream(remoteId, request.headers.get('Range'), request.signal)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        console.error('[media] falha no streaming da nuvem', error)
+        // 504: o player trata como erro de midia e mostra a mensagem
+        return new Response(message, { status: 504 })
+      }
+    }
+
+    const path = decodeURIComponent(alvo).replace(/\/$/, '')
 
     // Faixa de audio escolhida: precisa passar pelo ffmpeg (ver transcode.service).
     const audioParam = params.get('a')

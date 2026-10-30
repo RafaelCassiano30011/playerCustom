@@ -5,6 +5,7 @@ import { EpisodeItem } from './EpisodeItem'
 import { ConfirmDialog } from '@/components/common/ConfirmDialog'
 import { VideoSettingsModal } from '@/components/player/VideoSettingsModal'
 import { useLibraryStore } from '@/store/library.store'
+import { useCloudStore } from '@/store/cloud.store'
 
 interface EpisodeListProps {
   collectionId: string
@@ -32,6 +33,11 @@ export function EpisodeList({
   const deleteVideo = useLibraryStore((s) => s.deleteVideo)
   const reorder = useLibraryStore((s) => s.reorder)
   const move = useLibraryStore((s) => s.move)
+
+  const downloads = useCloudStore((s) => s.downloads)
+  const download = useCloudStore((s) => s.download)
+  const cancelDownload = useCloudStore((s) => s.cancelDownload)
+  const removeOffline = useCloudStore((s) => s.removeOffline)
 
   if (videos.length === 0) {
     return (
@@ -73,6 +79,10 @@ export function EpisodeList({
             index={index}
             active={video.id === activeVideoId}
             autoThumbnails={autoThumbnails}
+            download={downloads[video.id] ?? null}
+            onDownload={() => void download(video.id)}
+            onCancelDownload={() => void cancelDownload(video.id)}
+            onRemoveOffline={() => void removeOffline(video.id)}
             dragging={dragId === video.id}
             dragOver={dragOverId === video.id ? dragOverSide : null}
             onPlay={() => onPlay(video)}

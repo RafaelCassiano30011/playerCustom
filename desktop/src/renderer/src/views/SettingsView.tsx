@@ -1,6 +1,7 @@
 import { Fragment } from 'react'
 import { Switch } from '@/components/common/Switch'
 import { SubtitleSettings } from '@/components/settings/SubtitleSettings'
+import { CloudSettings } from '@/components/settings/CloudSettings'
 import { useSettingsStore } from '@/store/settings.store'
 import { SHORTCUTS } from '@/hooks/useKeyboardShortcuts'
 
@@ -111,6 +112,8 @@ export function SettingsView(): JSX.Element {
               </div>
             </div>
           </div>
+
+          <CloudSettings />
 
           <div className="settings-group">
             <div className="section-title" style={{ margin: 0 }}>

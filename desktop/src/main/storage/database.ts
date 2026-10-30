@@ -33,13 +33,34 @@ export const EMPTY_DB: DatabaseShape = {
 
 let store: JsonStore<DatabaseShape> | null = null
 
+/**
+ * Linhas gravadas antes da biblioteca na nuvem nao tem `source`, `remoteId`,
+ * `sizeBytes` nem `offlinePath`. Sem preencher aqui, `video.source` chega
+ * `undefined` no renderer e o player trata um arquivo local como remoto.
+ */
+function migrateCollection(raw: Collection): Collection {
+  return { ...raw, remoteId: raw.remoteId ?? null }
+}
+
+function migrateVideo(raw: Video): Video {
+  return {
+    ...raw,
+    source: raw.source ?? 'local',
+    remoteId: raw.remoteId ?? null,
+    sizeBytes: raw.sizeBytes ?? 0,
+    offlinePath: raw.offlinePath ?? null
+  }
+}
+
 /** Normaliza dados vindos do disco, preenchendo campos novos. */
 function migrate(raw: unknown): DatabaseShape {
   const source = (raw ?? {}) as Partial<DatabaseShape>
   return {
     version: 1,
-    collections: Array.isArray(source.collections) ? source.collections : [],
-    videos: Array.isArray(source.videos) ? source.videos : [],
+    collections: Array.isArray(source.collections)
+      ? source.collections.map(migrateCollection)
+      : [],
+    videos: Array.isArray(source.videos) ? source.videos.map(migrateVideo) : [],
     history: Array.isArray(source.history) ? source.history : [],
     settings: { ...DEFAULT_SETTINGS, ...(source.settings ?? {}) },
     nextHistoryId:
@@ -84,6 +105,13 @@ export function closeStorage(): void {
 /** Pasta das miniaturas geradas automaticamente. */
 export function thumbnailsDir(): string {
   const dir = join(app.getPath('userData'), 'thumbnails')
+  mkdirSync(dir, { recursive: true })
+  return dir
+}
+
+/** Pasta dos videos baixados da nuvem para assistir offline. */
+export function offlineVideosDir(): string {
+  const dir = join(app.getPath('userData'), 'offline')
   mkdirSync(dir, { recursive: true })
   return dir
 }

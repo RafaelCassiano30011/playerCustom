@@ -5,6 +5,17 @@
 
 export type VideoStatus = 'not_started' | 'in_progress' | 'completed'
 
+/**
+ * De onde vem a midia.
+ *
+ * `local`: arquivo que o usuario importou do disco.
+ * `cloud`: arquivo que vive no R2. Toca por streaming, ou do disco quando
+ * baixado para assistir offline (`offlinePath`).
+ */
+export type VideoSource = 'local' | 'cloud'
+
+export type DownloadState = 'idle' | 'queued' | 'downloading' | 'done' | 'error'
+
 export type RepeatMode = 'off' | 'one' | 'all'
 
 export interface Collection {
@@ -12,6 +23,8 @@ export interface Collection {
   name: string
   description: string | null
   thumbnail: string | null
+  /** Id da colecao no servidor; null quando e so local. */
+  remoteId: string | null
   createdAt: number
   updatedAt: number
 }
@@ -43,6 +56,13 @@ export interface Video {
   lastPosition: number
   favorite: boolean
   lastPlayedAt: number | null
+  source: VideoSource
+  /** Id do arquivo no servidor; null quando e so local. */
+  remoteId: string | null
+  /** Tamanho em bytes (0 quando desconhecido). */
+  sizeBytes: number
+  /** Copia baixada para assistir offline; null quando so existe na nuvem. */
+  offlinePath: string | null
   createdAt: number
   updatedAt: number
 }
@@ -100,6 +120,10 @@ export interface AppSettings {
   lastCollectionId: string | null
   lastVideoId: string | null
   theme: 'dark' | 'midnight'
+  /** Base da API na nuvem (sem barra no fim). */
+  cloudApiBaseUrl: string
+  /** Sincroniza catalogo e progresso em segundo plano. */
+  cloudAutoSync: boolean
 }
 
 export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
@@ -144,7 +168,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoThumbnails: true,
   lastCollectionId: null,
   lastVideoId: null,
-  theme: 'dark'
+  theme: 'dark',
+  cloudApiBaseUrl: 'https://playercustom-api.player-d22.workers.dev',
+  cloudAutoSync: true
 }
 
 /* ---------- Payloads de entrada ---------- */
@@ -180,6 +206,64 @@ export interface SaveProgressInput {
   position: number
   duration?: number
   completed?: boolean
+}
+
+/* ---------- Nuvem ---------- */
+
+export interface CloudCredentials {
+  email: string
+  password: string
+}
+
+export interface CloudStatus {
+  /** Ha sessao gravada (mesmo que o acesso tenha expirado). */
+  signedIn: boolean
+  email: string | null
+  apiBaseUrl: string
+  /** Ultima chamada a API funcionou. Falso enquanto offline. */
+  online: boolean
+  syncing: boolean
+  lastSyncAt: number | null
+  lastError: string | null
+  /** Posicoes ainda nao enviadas, acumuladas enquanto offline. */
+  pendingProgress: number
+}
+
+export interface CloudSyncResult {
+  collections: number
+  videos: number
+  removed: number
+  /** Posicoes enviadas nesta rodada. */
+  progressPushed: number
+  /** Posicoes recebidas do servidor. */
+  progressPulled: number
+}
+
+export interface DownloadProgress {
+  videoId: string
+  state: DownloadState
+  receivedBytes: number
+  totalBytes: number
+  /** 0..1 */
+  fraction: number
+  error: string | null
+}
+
+export interface UploadProgress {
+  /** Caminho do arquivo local sendo enviado. */
+  path: string
+  name: string
+  state: 'uploading' | 'done' | 'error'
+  sentBytes: number
+  totalBytes: number
+  fraction: number
+  error: string | null
+}
+
+export interface CloudUploadInput {
+  /** Colecao local de destino; precisa ter `remoteId`. */
+  collectionId: string
+  paths: string[]
 }
 
 export interface ApplyCollectionDefaultsInput {
