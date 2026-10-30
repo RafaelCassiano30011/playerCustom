@@ -1,0 +1,32 @@
+{
+  "name": "playercustom-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "API Cloudflare Workers para a biblioteca de vídeos do playerCustom (catálogo D1 + blobs R2).",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply playercustom-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply playercustom-db --remote",
+    "cf-typegen": "wrangler types"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.36.4",
+    "hono": "^4.6.14",
+    "jose": "^5.9.6",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.5.40",
+    "@cloudflare/workers-types": "^4.20241218.0",
+    "drizzle-kit": "^0.28.1",
+    "typescript": "^5.7.2",
+    "vitest": "2.1.8",
+    "wrangler": "^3.99.0"
+  }
+}

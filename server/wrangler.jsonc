@@ -1,0 +1,45 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "playercustom-api",
+  "main": "src/server.ts",
+  "compatibility_date": "2024-12-18",
+  "compatibility_flags": ["nodejs_compat"],
+  "account_id": "d2200e72a8e5b8bb5da8c45c3137329d",
+
+  "observability": {
+    "enabled": true
+  },
+
+  // Variáveis públicas — trocáveis sem mexer no código.
+  "vars": {
+    "APP_ORIGIN": "https://playercustom.app",
+    "CORS_ORIGINS": "http://localhost:5173,app://playercustom,http://localhost:4173",
+    "MAX_FILE_BYTES": "21474836480",
+    "ACCESS_TOKEN_TTL_SECONDS": "900",
+    "REFRESH_TOKEN_TTL_SECONDS": "2592000",
+    // Validade do link assinado de streaming. Curto: a TV pede um novo a cada
+    // reprodução, e um link vazado morre rápido.
+    "STREAM_TOKEN_TTL_SECONDS": "21600"
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "playercustom-db",
+      "database_id": "c02baad9-924b-48a1-86ea-91b66b1ac101",
+      "migrations_dir": "src/db/migrations"
+    }
+  ],
+
+  "r2_buckets": [
+    {
+      "binding": "FILES_BUCKET",
+      "bucket_name": "playercustom-videos"
+    }
+  ],
+
+  // Limpeza de uploads expirados e objetos órfãos.
+  "triggers": {
+    "crons": ["0 * * * *"]
+  }
+}
