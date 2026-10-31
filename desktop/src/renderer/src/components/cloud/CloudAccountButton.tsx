@@ -17,6 +17,8 @@ interface CloudAccountButtonProps {
 export function CloudAccountButton({ onOpenSettings }: CloudAccountButtonProps): JSX.Element {
   const [abrindoLogin, setAbrindoLogin] = useState(false)
   const status = useCloudStore((s) => s.status)
+  const busy = useCloudStore((s) => s.busy)
+  const sync = useCloudStore((s) => s.sync)
 
   if (!status.signedIn) {
     return (
@@ -41,40 +43,50 @@ export function CloudAccountButton({ onOpenSettings }: CloudAccountButtonProps):
         : 'Conectado'
 
   return (
-    <button
-      className="nav-item"
-      onClick={onOpenSettings}
-      title={`${status.email ?? ''} — ${detalhe}`}
-      style={{ alignItems: 'flex-start' }}
-    >
-      {status.syncing ? (
-        <RefreshCw size={16} className="spin" />
-      ) : status.online ? (
-        <Cloud size={16} />
-      ) : (
-        <CloudOff size={16} />
-      )}
-      <span
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'flex-start',
-          overflow: 'hidden',
-          lineHeight: 1.3
-        }}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      <button
+        className="nav-item"
+        onClick={onOpenSettings}
+        title={`${status.email ?? ''} — ${detalhe}`}
+        style={{ alignItems: 'flex-start' }}
       >
+        {status.online ? <Cloud size={16} /> : <CloudOff size={16} />}
         <span
           style={{
-            maxWidth: 150,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-start',
             overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap'
+            lineHeight: 1.3
           }}
         >
-          {status.email}
+          <span
+            style={{
+              maxWidth: 130,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            {status.email}
+          </span>
+          <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{detalhe}</span>
         </span>
-        <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{detalhe}</span>
-      </span>
-    </button>
+      </button>
+
+      <button
+        className="icon-btn"
+        onClick={() => void sync()}
+        disabled={busy || status.syncing}
+        aria-label="Sincronizar com a nuvem"
+        title={
+          status.online
+            ? 'Sincronizar com a nuvem'
+            : 'Offline: sincroniza quando a conexao voltar'
+        }
+      >
+        <RefreshCw size={16} className={status.syncing ? 'spin' : undefined} />
+      </button>
+    </div>
   )
 }

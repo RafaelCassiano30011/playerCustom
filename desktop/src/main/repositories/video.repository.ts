@@ -111,6 +111,35 @@ export const videoRepository = {
     })
   },
 
+  /**
+   * Liga um video que ja existe na biblioteca local ao arquivo que acabou de
+   * subir. Sem isso o upload criaria uma segunda linha para o mesmo episodio:
+   * uma do disco e outra da nuvem. O arquivo de origem vira a copia offline,
+   * e nome, posicao, progresso e favorito continuam como estavam.
+   */
+  linkLocalToRemote(input: {
+    path: string
+    collectionId: string
+    remoteId: string
+    sizeBytes: number
+    duration: number
+  }): Video | null {
+    return mutate((state) => {
+      const video = state.videos.find(
+        (v) => v.collectionId === input.collectionId && v.path === input.path && !v.remoteId
+      )
+      if (!video) return null
+
+      video.remoteId = input.remoteId
+      video.source = 'cloud'
+      video.offlinePath = input.path
+      if (input.sizeBytes > 0) video.sizeBytes = input.sizeBytes
+      if (input.duration > 0 && video.duration <= 0) video.duration = input.duration
+      video.updatedAt = Date.now()
+      return { ...video }
+    })
+  },
+
   /** Marca (ou limpa) a copia baixada para assistir offline. */
   setOfflinePath(id: string, offlinePath: string | null): Video {
     return mutate((state) => {

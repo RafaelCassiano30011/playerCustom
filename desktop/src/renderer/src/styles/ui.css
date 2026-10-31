@@ -178,6 +178,12 @@
   font-weight: 600;
   background: var(--bg-3);
   color: var(--text-1);
+  /* rotulo de uma palavra so: quebrar em duas linhas desmonta a pilula */
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.badge svg {
+  flex-shrink: 0;
 }
 .badge--ok {
   background: rgba(61, 220, 132, 0.14);

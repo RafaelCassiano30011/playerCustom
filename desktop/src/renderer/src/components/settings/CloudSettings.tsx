@@ -100,6 +100,19 @@ export function CloudSettings(): JSX.Element {
 
       <div className="settings-row">
         <div>
+          <div className="settings-row__label">Enviar o que eu importar</div>
+          <div className="settings-row__hint">
+            Todo video importado sobe para a nuvem e fica disponivel na TV
+          </div>
+        </div>
+        <Switch
+          checked={settings.cloudAutoUpload}
+          onChange={(v) => void patch({ cloudAutoUpload: v })}
+        />
+      </div>
+
+      <div className="settings-row">
+        <div>
           <div className="settings-row__label">Endereco da API</div>
           <div className="settings-row__hint">Mude so se voce publicou seu proprio servidor</div>
         </div>

@@ -58,10 +58,23 @@ export function registerIpcHandlers(): void {
   handle(IPC.videosGet, (id: string) => videoRepository.find(id))
   handle(IPC.videosImport, async ({ collectionId, paths }: ImportVideosInput) => {
     const files = await fileService.resolve(paths)
-    return videoRepository.importMany(
+    const importados = videoRepository.importMany(
       collectionId,
       files.map((f) => f.path)
     )
+
+    // Com sessao ativa, importar ja significa enviar: o envio roda solto e a
+    // interface acompanha pelos eventos de progresso, entao a importacao
+    // continua respondendo na hora. O upload liga no video que acabou de
+    // nascer em vez de criar outro.
+    const novos = importados.map((v) => v.path).filter(Boolean)
+    if (settingsRepository.get().cloudAutoUpload && cloud.status().signedIn && novos.length > 0) {
+      void cloud.upload(collectionId, novos).catch(() => {
+        // erro por arquivo ja vira evento de upload; aqui so evita unhandled
+      })
+    }
+
+    return importados
   })
   handle(IPC.videosUpdate, (id: string, input: UpdateVideoInput) =>
     videoRepository.update(id, input)

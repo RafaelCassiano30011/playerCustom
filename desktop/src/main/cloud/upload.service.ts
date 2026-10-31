@@ -148,16 +148,31 @@ export async function upload(collectionId: string, paths: string[]): Promise<Vid
 
     try {
       const remoto = await enviarArquivo(arquivo.path, arquivo.size, colecao.remoteId, progresso)
-      const video = videoRepository.upsertRemote({
-        remoteId: remoto.id,
+
+      // arquivo que ja estava na biblioteca (importado antes, ou importado
+      // agora com envio automatico) so ganha o vinculo remoto
+      const existente = videoRepository.linkLocalToRemote({
+        path: arquivo.path,
         collectionId,
-        name: remoto.originalName.replace(/\.[a-z0-9]+$/i, ''),
-        duration: remoto.durationSeconds ?? 0,
+        remoteId: remoto.id,
         sizeBytes: remoto.sizeBytes,
-        position: base + indice
+        duration: remoto.durationSeconds ?? 0
       })
-      // o arquivo ja esta no disco: vale como copia offline desde o primeiro dia
-      criados.push(videoRepository.setOfflinePath(video.id, arquivo.path))
+
+      if (existente) {
+        criados.push(existente)
+      } else {
+        const video = videoRepository.upsertRemote({
+          remoteId: remoto.id,
+          collectionId,
+          name: remoto.originalName.replace(/\.[a-z0-9]+$/i, ''),
+          duration: remoto.durationSeconds ?? 0,
+          sizeBytes: remoto.sizeBytes,
+          position: base + indice
+        })
+        // o arquivo ja esta no disco: vale como copia offline desde o inicio
+        criados.push(videoRepository.setOfflinePath(video.id, arquivo.path))
+      }
 
       progresso.state = 'done'
       progresso.fraction = 1

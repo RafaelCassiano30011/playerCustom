@@ -124,6 +124,8 @@ export interface AppSettings {
   cloudApiBaseUrl: string
   /** Sincroniza catalogo e progresso em segundo plano. */
   cloudAutoSync: boolean
+  /** Enviar para a nuvem todo video importado, sem pedir. */
+  cloudAutoUpload: boolean
 }
 
 export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
@@ -170,7 +172,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lastVideoId: null,
   theme: 'dark',
   cloudApiBaseUrl: 'https://playercustom-api.player-d22.workers.dev',
-  cloudAutoSync: true
+  cloudAutoSync: true,
+  cloudAutoUpload: true
 }
 
 /* ---------- Payloads de entrada ---------- */

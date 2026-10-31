@@ -10,7 +10,7 @@ import {
   Play,
   X
 } from 'lucide-react'
-import type { DownloadProgress, Video } from '@shared/types'
+import type { DownloadProgress, UploadProgress, Video } from '@shared/types'
 import { formatTime } from '@shared/time'
 import { mediaUrl, videoProgress } from '@/lib/media'
 import { MenuItem, PlayerMenu } from '@/components/player/PlayerMenu'
@@ -24,6 +24,8 @@ interface EpisodeItemProps {
   autoThumbnails: boolean
   /** Download em andamento deste episodio, quando houver. */
   download: DownloadProgress | null
+  /** Envio em andamento deste episodio, quando houver. */
+  upload: UploadProgress | null
   onDownload: () => void
   onCancelDownload: () => void
   onRemoveOffline: () => void
@@ -50,6 +52,7 @@ function EpisodeItemImpl({
   dragOver,
   autoThumbnails,
   download,
+  upload,
   onDownload,
   onCancelDownload,
   onRemoveOffline,
@@ -81,6 +84,8 @@ function EpisodeItemImpl({
   const offline = video.offlinePath !== null
   const baixando = download?.state === 'downloading'
   const percentual = baixando ? Math.round((download?.fraction ?? 0) * 100) : 0
+  const enviando = upload?.state === 'uploading'
+  const percentualEnvio = enviando ? Math.round((upload?.fraction ?? 0) * 100) : 0
 
   return (
     <div
@@ -126,7 +131,8 @@ function EpisodeItemImpl({
           )}
           {video.status === 'in_progress' && <span className="badge badge--progress">Em andamento</span>}
           {baixando && <span className="badge badge--progress">Baixando {percentual}%</span>}
-          {naNuvem && !baixando && (
+          {enviando && <span className="badge badge--progress">Enviando {percentualEnvio}%</span>}
+          {naNuvem && !baixando && !enviando && (
             <span className="badge" title={offline ? 'Disponivel offline' : 'Toca por streaming'}>
               {offline ? (
                 <>

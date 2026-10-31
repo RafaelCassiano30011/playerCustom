@@ -78,6 +78,13 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /*
+   * O episodio se adapta a largura DESTA lista, nao da janela: com o player
+   * aberto ao lado, a janela continua larga enquanto a lista fica estreita,
+   * e uma media query nunca dispararia.
+   */
+  container-type: inline-size;
+  container-name: episodes;
   padding: 0 10px 16px;
   display: flex;
   flex-direction: column;
@@ -171,6 +178,7 @@
 
 .episode__info {
   min-width: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -185,15 +193,48 @@
 .episode__meta {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
   font-size: 11px;
   color: var(--text-2);
+}
+
+/*
+ * Em janela estreita o episodio vira duas linhas: titulo e selos em cima,
+ * acoes embaixo. Antes os selos entravam embaixo dos botoes e o texto
+ * quebrava no meio da pilula.
+ */
+@container episodes (max-width: 460px) {
+  .episode {
+    grid-template-columns: 72px minmax(0, 1fr);
+    grid-template-areas:
+      'thumb info'
+      'thumb actions';
+    row-gap: 6px;
+  }
+  .episode__handle {
+    display: none;
+  }
+  .episode__thumb {
+    grid-area: thumb;
+  }
+  .episode__info {
+    grid-area: info;
+  }
+  .episode__actions {
+    grid-area: actions;
+    justify-content: flex-start;
+    /* sem hover no toque: as acoes ficam sempre visiveis nesse tamanho */
+    opacity: 1;
+  }
 }
 
 .episode__actions {
   display: flex;
   align-items: center;
   gap: 2px;
+  flex-shrink: 0;
   opacity: 0;
   transition: opacity 0.16s var(--ease);
 }

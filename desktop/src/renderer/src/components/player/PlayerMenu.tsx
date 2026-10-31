@@ -1,4 +1,12 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode
+} from 'react'
+import { createPortal } from 'react-dom'
 
 interface PlayerMenuProps {
   icon: ReactNode
@@ -7,15 +15,69 @@ interface PlayerMenuProps {
   children: (close: () => void) => ReactNode
 }
 
-/** Menu suspenso da barra de controles (velocidade, legendas, audio). */
+const MARGEM = 8
+
+/**
+ * Menu suspenso usado na barra do player e na lista de episodios.
+ *
+ * O painel vai para um portal com posicao fixa: dentro da lista ele seria
+ * recortado pelo `overflow-y` do container, que foi exatamente o que
+ * acontecia. Abre para baixo quando cabe e vira para cima quando nao cabe,
+ * que e o caso da barra de controles, colada no rodape.
+ */
 export function PlayerMenu({ icon, label, active, children }: PlayerMenuProps): JSX.Element {
   const [open, setOpen] = useState(false)
+  const [posicao, setPosicao] = useState<{ top: number; left: number } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+  const painel = useRef<HTMLDivElement>(null)
+
+  const posicionar = useCallback((): void => {
+    const botao = ref.current?.getBoundingClientRect()
+    const caixa = painel.current?.getBoundingClientRect()
+    if (!botao || !caixa) return
+
+    const abaixo = botao.bottom + MARGEM
+    const cabeAbaixo = abaixo + caixa.height <= window.innerHeight - MARGEM
+    const top = cabeAbaixo
+      ? abaixo
+      : Math.max(MARGEM, botao.top - MARGEM - caixa.height)
+
+    // alinhado pela direita do botao, sem passar das bordas da janela
+    const left = Math.min(
+      Math.max(MARGEM, botao.right - caixa.width),
+      window.innerWidth - caixa.width - MARGEM
+    )
+
+    setPosicao({ top, left })
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setPosicao(null)
+      return
+    }
+    posicionar()
+  }, [open, posicionar])
+
+  useEffect(() => {
+    if (!open) return
+    // rolar ou redimensionar move o botao: reposiciona em vez de deixar o
+    // painel flutuando longe de quem o abriu
+    const refazer = (): void => posicionar()
+    window.addEventListener('scroll', refazer, true)
+    window.addEventListener('resize', refazer)
+    return () => {
+      window.removeEventListener('scroll', refazer, true)
+      window.removeEventListener('resize', refazer)
+    }
+  }, [open, posicionar])
 
   useEffect(() => {
     if (!open) return
     const onPointerDown = (event: PointerEvent): void => {
-      if (!ref.current?.contains(event.target as Node)) setOpen(false)
+      const alvo = event.target as Node
+      if (ref.current?.contains(alvo) || painel.current?.contains(alvo)) return
+      setOpen(false)
     }
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') {
@@ -42,7 +104,23 @@ export function PlayerMenu({ icon, label, active, children }: PlayerMenuProps): 
       >
         {icon}
       </button>
-      {open && <div className="menu__panel">{children(() => setOpen(false))}</div>}
+      {open &&
+        createPortal(
+          <div
+            className="menu__panel menu__panel--floating"
+            ref={painel}
+            style={{
+              top: posicao?.top ?? -9999,
+              left: posicao?.left ?? -9999,
+              // enquanto nao mediu, fica fora da tela para nao piscar no canto
+              visibility: posicao ? 'visible' : 'hidden'
+            }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            {children(() => setOpen(false))}
+          </div>,
+          document.body
+        )}
     </div>
   )
 }

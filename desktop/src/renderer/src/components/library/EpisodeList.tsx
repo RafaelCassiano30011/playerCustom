@@ -35,6 +35,7 @@ export function EpisodeList({
   const move = useLibraryStore((s) => s.move)
 
   const downloads = useCloudStore((s) => s.downloads)
+  const uploads = useCloudStore((s) => s.uploads)
   const download = useCloudStore((s) => s.download)
   const cancelDownload = useCloudStore((s) => s.cancelDownload)
   const removeOffline = useCloudStore((s) => s.removeOffline)
@@ -80,6 +81,10 @@ export function EpisodeList({
             active={video.id === activeVideoId}
             autoThumbnails={autoThumbnails}
             download={downloads[video.id] ?? null}
+            upload={
+              // o envio e por caminho de arquivo; o video so sabe o dele
+              uploads.find((u) => u.path === (video.offlinePath ?? video.path)) ?? null
+            }
             onDownload={() => void download(video.id)}
             onCancelDownload={() => void cancelDownload(video.id)}
             onRemoveOffline={() => void removeOffline(video.id)}

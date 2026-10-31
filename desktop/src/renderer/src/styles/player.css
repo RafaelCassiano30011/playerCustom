@@ -235,6 +235,13 @@
   max-height: 260px;
   overflow-y: auto;
 }
+/* Versao em portal: coordenadas vem do componente, acima de qualquer modal. */
+.menu__panel--floating {
+  position: fixed;
+  bottom: auto;
+  right: auto;
+  z-index: 300;
+}
 .menu__item {
   display: flex;
   align-items: center;
