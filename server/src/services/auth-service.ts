@@ -1,15 +1,18 @@
-import { and, eq, gt, isNull } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, lt } from 'drizzle-orm';
 import type { Database } from '../db';
-import { refreshTokens, users } from '../db';
+import { loginCodes, refreshTokens, users } from '../db';
 import { ApiError } from '../lib/responses';
 import {
   hashPassword,
   randomId,
+  randomNumericCode,
   randomToken,
   sha256Hex,
   signAccessToken,
+  timingSafeEqual,
   verifyPassword,
 } from '../lib/crypto';
+import { loginCodeMessage, sendEmail } from '../lib/email';
 import type { Env } from '../types';
 
 export interface AuthTokens {
@@ -101,6 +104,9 @@ export async function login(
     throw generico;
   }
 
+  // conta criada por codigo no e-mail nao tem senha para conferir
+  if (!registro.passwordHash || !registro.passwordSalt) throw generico;
+
   const ok = await verifyPassword(
     password,
     registro.passwordHash,
@@ -160,4 +166,144 @@ export async function logoutAll(db: Database, userId: string): Promise<void> {
     .update(refreshTokens)
     .set({ revokedAt: Date.now() })
     .where(and(eq(refreshTokens.userId, userId), isNull(refreshTokens.revokedAt)));
+}
+
+/* ------------------------------------------------------------------ *
+ * Login por codigo no e-mail
+ * ------------------------------------------------------------------ */
+
+/** Tentativas de chute por codigo antes de queimar. */
+const MAX_TENTATIVAS = 5;
+/** Intervalo minimo entre dois pedidos para o mesmo e-mail. */
+const REENVIO_SEGUNDOS = 60;
+
+function codigoTtl(env: Env): number {
+  const valor = Number(env.LOGIN_CODE_TTL_SECONDS);
+  return Number.isFinite(valor) && valor > 0 ? valor : 600;
+}
+
+function emailPermitido(env: Env, email: string): boolean {
+  const lista = (env.ALLOWED_EMAILS ?? '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  return lista.length === 0 || lista.includes(email);
+}
+
+export interface CodigoPedido {
+  /** Quando outro pedido para o mesmo e-mail sera aceito. */
+  retryAfter: number;
+  expiresIn: number;
+  /** So com LOGIN_CODE_DEBUG ligado (testes). */
+  code?: string;
+}
+
+/**
+ * Cria e envia um codigo de uso unico.
+ *
+ * A resposta e sempre a mesma, mesmo para e-mail fora da lista permitida ou
+ * para pedido repetido: quem esta do outro lado nao descobre quais enderecos
+ * existem nem quais recebem e-mail.
+ */
+export async function requestLoginCode(
+  db: Database,
+  env: Env,
+  email: string,
+): Promise<CodigoPedido> {
+  const ttl = codigoTtl(env);
+  const agora = Date.now();
+  const resposta: CodigoPedido = { retryAfter: REENVIO_SEGUNDOS, expiresIn: ttl };
+
+  if (!emailPermitido(env, email)) return resposta;
+
+  // pedido recente ainda valendo: nao manda outro e-mail, so repete a resposta
+  const [recente] = await db
+    .select({ createdAt: loginCodes.createdAt })
+    .from(loginCodes)
+    .where(and(eq(loginCodes.email, email), isNull(loginCodes.consumedAt)))
+    .orderBy(desc(loginCodes.createdAt))
+    .limit(1);
+  if (recente && agora - recente.createdAt < REENVIO_SEGUNDOS * 1000) return resposta;
+
+  // um codigo valido por vez: o anterior morre junto com o novo pedido
+  await db.delete(loginCodes).where(eq(loginCodes.email, email));
+  // limpeza oportunista do que ja venceu de outros enderecos
+  await db.delete(loginCodes).where(lt(loginCodes.expiresAt, agora));
+
+  const codigo = randomNumericCode(6);
+  await db.insert(loginCodes).values({
+    id: randomId(),
+    email,
+    codeHash: await sha256Hex(codigo),
+    attempts: 0,
+    expiresAt: agora + ttl * 1000,
+    createdAt: agora,
+  });
+
+  await sendEmail(env, loginCodeMessage(email, codigo, Math.round(ttl / 60)));
+  if (env.LOGIN_CODE_DEBUG === 'true') return { ...resposta, code: codigo };
+  return resposta;
+}
+
+/**
+ * Confere o codigo e devolve os tokens. O primeiro acesso de um e-mail cria a
+ * conta: quem recebeu o codigo provou que e dono da caixa, e exigir cadastro
+ * antes disso seria uma tela a mais para nada.
+ */
+export async function loginWithCode(
+  db: Database,
+  env: Env,
+  email: string,
+  code: string,
+): Promise<AuthTokens> {
+  const agora = Date.now();
+  const generico = ApiError.unauthorized('Codigo invalido ou expirado.');
+
+  const [registro] = await db
+    .select()
+    .from(loginCodes)
+    .where(and(eq(loginCodes.email, email), isNull(loginCodes.consumedAt)))
+    .orderBy(desc(loginCodes.createdAt))
+    .limit(1);
+
+  if (!registro) throw generico;
+  if (registro.expiresAt <= agora) {
+    await db.delete(loginCodes).where(eq(loginCodes.id, registro.id));
+    throw generico;
+  }
+  if (registro.attempts >= MAX_TENTATIVAS) {
+    await db.delete(loginCodes).where(eq(loginCodes.id, registro.id));
+    throw ApiError.tooManyRequests('Codigo bloqueado por tentativas. Peca outro.');
+  }
+
+  const confere = timingSafeEqual(await sha256Hex(code), registro.codeHash);
+  if (!confere) {
+    await db
+      .update(loginCodes)
+      .set({ attempts: registro.attempts + 1 })
+      .where(eq(loginCodes.id, registro.id));
+    throw generico;
+  }
+
+  await db.delete(loginCodes).where(eq(loginCodes.id, registro.id));
+
+  const [existente] = await db
+    .select({ id: users.id, email: users.email })
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+
+  if (existente) return emitirTokens(db, env, existente);
+
+  const user = { id: randomId(), email };
+  await db.insert(users).values({
+    id: user.id,
+    email,
+    // sem senha: entra sempre por codigo no e-mail
+    passwordHash: '',
+    passwordSalt: '',
+    createdAt: agora,
+    updatedAt: agora,
+  });
+  return emitirTokens(db, env, user);
 }

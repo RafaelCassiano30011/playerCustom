@@ -11,9 +11,29 @@ export interface Env {
   ACCESS_TOKEN_TTL_SECONDS: string;
   REFRESH_TOKEN_TTL_SECONDS: string;
   STREAM_TOKEN_TTL_SECONDS: string;
+  LOGIN_CODE_TTL_SECONDS: string;
+
+  /** Remetente dos e-mails de codigo. */
+  EMAIL_FROM: string;
+  /**
+   * Lista de e-mails, separados por virgula, que podem receber codigo. Vazio
+   * libera qualquer um — e um endpoint publico que dispara e-mail para
+   * qualquer endereco vira relay de spam, entao em producao isso fica preso
+   * na sua conta.
+   */
+  ALLOWED_EMAILS: string;
+
+  /**
+   * So os testes ligam isso: faz a resposta de `/auth/code` devolver o codigo
+   * gerado, porque o teste nao tem caixa de e-mail para ler. Nunca entra no
+   * wrangler.jsonc.
+   */
+  LOGIN_CODE_DEBUG?: string;
 
   /** secret: `wrangler secret put JWT_SECRET` */
   JWT_SECRET: string;
+  /** secret: `wrangler secret put RESEND_API_KEY` (sem ela, o codigo so vai para o log) */
+  RESEND_API_KEY?: string;
 }
 
 export interface AuthUser {

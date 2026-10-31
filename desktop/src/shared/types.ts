@@ -210,6 +210,17 @@ export interface SaveProgressInput {
 
 /* ---------- Nuvem ---------- */
 
+export interface CloudCodeInput {
+  email: string
+  code: string
+}
+
+/** Resposta do pedido de codigo: quanto vale e quando pode pedir outro. */
+export interface CloudCodeRequest {
+  retryAfter: number
+  expiresIn: number
+}
+
 export interface CloudCredentials {
   email: string
   password: string

@@ -1,6 +1,7 @@
 import { Clapperboard, Clock, Heart, Home, Search, Settings, PlusCircle } from 'lucide-react'
 import type { CollectionWithStats } from '@shared/types'
 import type { View } from '@/App'
+import { CloudAccountButton } from '@/components/cloud/CloudAccountButton'
 
 interface SidebarProps {
   view: View
@@ -103,6 +104,7 @@ export function Sidebar({
       </div>
 
       <div className="sidebar__footer">
+        <CloudAccountButton onOpenSettings={() => onNavigate('settings')} />
         <button
           className={`nav-item${view === 'settings' ? ' nav-item--active' : ''}`}
           onClick={() => onNavigate('settings')}

@@ -7,6 +7,7 @@ import {
 import type {
   ApplyCollectionDefaultsInput,
   AppSettings,
+  CloudCodeInput,
   CloudCredentials,
   CloudUploadInput,
   CreateCollectionInput,
@@ -171,6 +172,10 @@ export function registerIpcHandlers(): void {
   handle(IPC.cloudStatus, () => cloud.status())
   handle(IPC.cloudLogin, ({ email, password }: CloudCredentials) =>
     cloud.signInExisting(email, password)
+  )
+  handle(IPC.cloudRequestCode, (email: string) => cloud.requestCode(email))
+  handle(IPC.cloudVerifyCode, ({ email, code }: CloudCodeInput) =>
+    cloud.signInWithCode(email, code)
   )
   handle(IPC.cloudRegister, ({ email, password }: CloudCredentials) =>
     cloud.signUp(email, password)

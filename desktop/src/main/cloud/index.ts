@@ -1,4 +1,4 @@
-import { connectivity, login, logout, register } from './api-client'
+import { connectivity, login, loginWithCode, logout, register } from './api-client'
 import { session } from './session'
 import { flushQueue } from './progress.service'
 import { pullCatalog, pullChanges } from './sync.service'
@@ -6,7 +6,7 @@ import { verifyOfflineCopies } from './download.service'
 import { db } from '../storage/database'
 import type { CloudStatus, CloudSyncResult } from '@shared/types'
 
-export { CloudError, OfflineError, connectivity } from './api-client'
+export { CloudError, OfflineError, connectivity, requestCode } from './api-client'
 export { saveProgress, markOpened, flushQueue } from './progress.service'
 export { proxyStream, signedLink, forgetLink } from './stream.service'
 export { download, cancel as cancelDownload, removeOffline, activeDownloads, onDownloadProgress } from './download.service'
@@ -144,6 +144,11 @@ export function signInExisting(email: string, password: string): Promise<CloudSt
 
 export function signUp(email: string, password: string): Promise<CloudStatus> {
   return signIn(register, email, password)
+}
+
+/** Entra com o codigo que chegou por e-mail; cria a conta no primeiro acesso. */
+export function signInWithCode(email: string, code: string): Promise<CloudStatus> {
+  return signIn(loginWithCode, email, code)
 }
 
 export async function signOut(): Promise<CloudStatus> {

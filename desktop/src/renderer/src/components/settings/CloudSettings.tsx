@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Cloud, CloudOff, Loader2, RefreshCw } from 'lucide-react'
 import { Switch } from '@/components/common/Switch'
+import { CloudLoginModal } from '@/components/cloud/CloudLoginModal'
 import { useCloudStore } from '@/store/cloud.store'
 import { useSettingsStore } from '@/store/settings.store'
 
@@ -17,20 +18,10 @@ export function CloudSettings(): JSX.Element {
 
   const status = useCloudStore((s) => s.status)
   const busy = useCloudStore((s) => s.busy)
-  const login = useCloudStore((s) => s.login)
-  const register = useCloudStore((s) => s.register)
   const logout = useCloudStore((s) => s.logout)
   const sync = useCloudStore((s) => s.sync)
 
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-
-  const entrar = (criar: boolean): void => {
-    if (!email.trim() || password.length < 8) return
-    void (criar ? register(email.trim(), password) : login(email.trim(), password)).then((ok) => {
-      if (ok) setPassword('')
-    })
-  }
+  const [abrindoLogin, setAbrindoLogin] = useState(false)
 
   return (
     <div className="settings-group">
@@ -76,54 +67,22 @@ export function CloudSettings(): JSX.Element {
       </div>
 
       {!status.signedIn && (
-        <>
-          <div className="settings-row">
-            <div>
-              <div className="settings-row__label">E-mail</div>
-            </div>
-            <div className="settings-row__control">
-              <input
-                className="input"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="voce@exemplo.com"
-              />
+        <div className="settings-row">
+          <div>
+            <div className="settings-row__hint">
+              Codigo por e-mail, sem senha. A conta e a mesma usada pelo aplicativo de TV.
             </div>
           </div>
-
-          <div className="settings-row">
-            <div>
-              <div className="settings-row__label">Senha</div>
-              <div className="settings-row__hint">Minimo de 8 caracteres</div>
-            </div>
-            <div className="settings-row__control">
-              <input
-                className="input"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && entrar(false)}
-              />
-            </div>
+          <div className="settings-row__control">
+            <button
+              className="btn btn--primary"
+              onClick={() => setAbrindoLogin(true)}
+              disabled={busy}
+            >
+              Entrar
+            </button>
           </div>
-
-          <div className="settings-row">
-            <div>
-              <div className="settings-row__hint">
-                A conta e a mesma usada pelo aplicativo de TV.
-              </div>
-            </div>
-            <div className="settings-row__control" style={{ gap: 8 }}>
-              <button className="btn btn--primary" onClick={() => entrar(false)} disabled={busy}>
-                {busy && <Loader2 size={14} className="spin" />} Entrar
-              </button>
-              <button className="btn" onClick={() => entrar(true)} disabled={busy}>
-                Criar conta
-              </button>
-            </div>
-          </div>
-        </>
+        </div>
       )}
 
       <div className="settings-row">
@@ -154,6 +113,8 @@ export function CloudSettings(): JSX.Element {
           />
         </div>
       </div>
+
+      {abrindoLogin && <CloudLoginModal onClose={() => setAbrindoLogin(false)} />}
 
       {status.lastError && (
         <div className="settings-row">

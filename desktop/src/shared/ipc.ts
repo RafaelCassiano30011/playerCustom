@@ -1,6 +1,8 @@
 import type {
   ApplyCollectionDefaultsInput,
   AppSettings,
+  CloudCodeInput,
+  CloudCodeRequest,
   CloudCredentials,
   CloudStatus,
   CloudSyncResult,
@@ -69,6 +71,8 @@ export const IPC = {
 
   cloudStatus: 'cloud:status',
   cloudLogin: 'cloud:login',
+  cloudRequestCode: 'cloud:requestCode',
+  cloudVerifyCode: 'cloud:verifyCode',
   cloudRegister: 'cloud:register',
   cloudLogout: 'cloud:logout',
   cloudSync: 'cloud:sync',
@@ -154,6 +158,10 @@ export interface RendererApi {
   cloud: {
     status(): Promise<CloudStatus>
     login(input: CloudCredentials): Promise<CloudStatus>
+    /** Dispara o e-mail com o codigo de acesso. */
+    requestCode(email: string): Promise<CloudCodeRequest>
+    /** Entra com o codigo recebido; cria a conta no primeiro acesso. */
+    verifyCode(input: CloudCodeInput): Promise<CloudStatus>
     register(input: CloudCredentials): Promise<CloudStatus>
     logout(): Promise<CloudStatus>
     /** Puxa catalogo e progresso, e envia o que estava na fila. */

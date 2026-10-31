@@ -24,6 +24,12 @@ export const users = sqliteTable(
   {
     id: text('id').primaryKey(),
     email: text('email').notNull(),
+    /**
+     * Conta que so entra por codigo no e-mail guarda string vazia aqui.
+     * Deixar a coluna anulavel exigiria reconstruir a tabela, e no D1 isso
+     * significa DROP TABLE users com `collections` e `files` apontando para
+     * ela por FK em cascata — nao vale o risco por um campo opcional.
+     */
     passwordHash: text('password_hash').notNull(),
     passwordSalt: text('password_salt').notNull(),
     createdAt: integer('created_at').notNull(),
@@ -50,6 +56,30 @@ export const refreshTokens = sqliteTable(
   (t) => ({
     hashIdx: uniqueIndex('refresh_tokens_hash_idx').on(t.tokenHash),
     userIdx: index('refresh_tokens_user_idx').on(t.userId, t.expiresAt),
+  }),
+);
+
+/**
+ * Codigos de uso unico enviados por e-mail.
+ *
+ * Guardamos o hash do codigo, nunca o codigo: um vazamento do D1 nao deixa
+ * ninguem entrar. `attempts` limita o chute — seis digitos sao 1 em 1 milhao
+ * por tentativa, e sem teto um script tentaria tudo dentro da validade.
+ */
+export const loginCodes = sqliteTable(
+  'login_codes',
+  {
+    id: text('id').primaryKey(),
+    email: text('email').notNull(),
+    codeHash: text('code_hash').notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    expiresAt: integer('expires_at').notNull(),
+    consumedAt: integer('consumed_at'),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => ({
+    emailIdx: index('login_codes_email_idx').on(t.email, t.createdAt),
+    expiraIdx: index('login_codes_expires_idx').on(t.expiresAt),
   }),
 );
 

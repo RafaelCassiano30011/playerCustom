@@ -106,8 +106,18 @@ Em `vars` (wrangler.jsonc) — troque sem mexer no código:
 | `ACCESS_TOKEN_TTL_SECONDS` | validade do access token (padrão 900) |
 | `REFRESH_TOKEN_TTL_SECONDS` | validade do refresh token (padrão 30 dias) |
 | `STREAM_TOKEN_TTL_SECONDS` | validade do link assinado de vídeo (padrão 6 h) |
+| `LOGIN_CODE_TTL_SECONDS` | validade do código de acesso (padrão 600) |
+| `EMAIL_FROM` | remetente dos e-mails de código |
+| `ALLOWED_EMAILS` | e-mails que podem receber código, separados por vírgula |
 
-Bindings: `DB` (D1) e `FILES_BUCKET` (R2). Secret: `JWT_SECRET`.
+Bindings: `DB` (D1) e `FILES_BUCKET` (R2). Secrets: `JWT_SECRET` e
+`RESEND_API_KEY`.
+
+`ALLOWED_EMAILS` vazio libera qualquer endereço, e um endpoint público que
+dispara e-mail para qualquer um vira relay de spam — em produção isso fica
+preso na conta do dono. Sem `RESEND_API_KEY` nada é enviado e o código vai
+para o log do Worker (`wrangler tail`), que é o que acontece em
+`wrangler dev` e nos testes.
 
 O CORS valida a origem contra a lista — **nunca** devolve `*`. Origem
 desconhecida recebe 403 no preflight.
@@ -121,8 +131,10 @@ Todas as respostas são JSON. Erros seguem
 
 | Método | Rota | O que faz |
 |---|---|---|
-| POST | `/register` | cria conta, devolve tokens (201) |
-| POST | `/login` | autentica |
+| POST | `/code` | envia código de 6 dígitos por e-mail (202) |
+| POST | `/code/verify` | entra com o código; cria a conta no 1º acesso |
+| POST | `/register` | cria conta com senha, devolve tokens (201) |
+| POST | `/login` | autentica com senha |
 | POST | `/refresh` | troca o refresh token (rotaciona) |
 | POST | `/logout` | revoga um refresh token |
 | POST | `/logout-all` | revoga todos (exige access token) |

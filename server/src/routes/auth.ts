@@ -13,6 +13,12 @@ const credenciais = z.object({
 
 const refreshBody = z.object({ refreshToken: z.string().min(10).max(500) });
 
+const pedidoDeCodigo = z.object({ email: emailSchema });
+const codigo = z.object({
+  email: emailSchema,
+  code: z.string().trim().regex(/^\d{6}$/, 'O codigo tem 6 digitos.'),
+});
+
 export const authRoutes = new Hono<AppContext>();
 
 authRoutes.post(
@@ -40,6 +46,32 @@ authRoutes.post(
       c.env,
       body.email,
       body.password,
+    );
+    return c.json(tokens);
+  },
+);
+
+authRoutes.post(
+  '/code',
+  // dispara e-mail: limite apertado, senao a caixa do dono vira alvo
+  rateLimit({ limit: 5, windowSeconds: 600, name: 'login-code' }),
+  async (c) => {
+    const body = await parseJson(c.req.raw, pedidoDeCodigo);
+    const pedido = await authService.requestLoginCode(c.get('db'), c.env, body.email);
+    return c.json(pedido, 202);
+  },
+);
+
+authRoutes.post(
+  '/code/verify',
+  rateLimit({ limit: 20, windowSeconds: 600, name: 'login-code-verify' }),
+  async (c) => {
+    const body = await parseJson(c.req.raw, codigo);
+    const tokens = await authService.loginWithCode(
+      c.get('db'),
+      c.env,
+      body.email,
+      body.code,
     );
     return c.json(tokens);
   },

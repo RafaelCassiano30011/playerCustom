@@ -194,6 +194,39 @@ async function authenticate(path: string, email: string, password: string): Prom
   session.save(data.user.email, data)
 }
 
+export interface CodeRequest {
+  /** Segundos antes de o servidor aceitar outro pedido para o mesmo e-mail. */
+  retryAfter: number
+  /** Validade do codigo, em segundos. */
+  expiresIn: number
+}
+
+/**
+ * Pede o codigo de acesso. A resposta e a mesma para e-mail conhecido ou
+ * desconhecido, de proposito: quem usa o app nao descobre nada que ja nao
+ * saiba, e quem tenta adivinhar enderecos tambem nao.
+ */
+export async function requestCode(email: string): Promise<CodeRequest> {
+  const response = await rawFetch('/api/v1/auth/code', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email })
+  })
+  if (!response.ok) throw await failure(response)
+  return (await response.json()) as CodeRequest
+}
+
+export async function loginWithCode(email: string, code: string): Promise<void> {
+  const response = await rawFetch('/api/v1/auth/code/verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, code })
+  })
+  if (!response.ok) throw await failure(response)
+  const data = (await response.json()) as AuthResponse
+  session.save(data.user.email, data)
+}
+
 export function login(email: string, password: string): Promise<void> {
   return authenticate('/api/v1/auth/login', email, password)
 }

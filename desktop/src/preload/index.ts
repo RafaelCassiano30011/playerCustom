@@ -4,6 +4,7 @@ import type { RendererApi } from '@shared/ipc'
 import type {
   ApplyCollectionDefaultsInput,
   AppSettings,
+  CloudCodeInput,
   CloudCredentials,
   CloudStatus,
   CloudUploadInput,
@@ -84,6 +85,8 @@ const api: RendererApi = {
   cloud: {
     status: () => invoke(IPC.cloudStatus),
     login: (input: CloudCredentials) => invoke(IPC.cloudLogin, input),
+    requestCode: (email: string) => invoke(IPC.cloudRequestCode, email),
+    verifyCode: (input: CloudCodeInput) => invoke(IPC.cloudVerifyCode, input),
     register: (input: CloudCredentials) => invoke(IPC.cloudRegister, input),
     logout: () => invoke(IPC.cloudLogout),
     sync: () => invoke(IPC.cloudSync),

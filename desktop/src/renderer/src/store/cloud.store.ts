@@ -1,5 +1,10 @@
 import { create } from 'zustand'
-import type { CloudStatus, DownloadProgress, UploadProgress } from '@shared/types'
+import type {
+  CloudCodeRequest,
+  CloudStatus,
+  DownloadProgress,
+  UploadProgress
+} from '@shared/types'
 import { toast } from './toast.store'
 import { useLibraryStore } from './library.store'
 
@@ -33,6 +38,8 @@ interface CloudState {
   init: () => Promise<void>
   refreshStatus: () => Promise<void>
   login: (email: string, password: string) => Promise<boolean>
+  requestCode: (email: string) => Promise<CloudCodeRequest | null>
+  verifyCode: (email: string, code: string) => Promise<boolean>
   register: (email: string, password: string) => Promise<boolean>
   logout: () => Promise<void>
   sync: () => Promise<void>
@@ -97,6 +104,32 @@ export const useCloudStore = create<CloudState>((set, get) => ({
     set({ busy: true })
     try {
       set({ status: await window.api.cloud.login({ email, password }) })
+      toast.success('Conectado a nuvem.')
+      return true
+    } catch (error) {
+      toast.error(error)
+      return false
+    } finally {
+      set({ busy: false })
+    }
+  },
+
+  requestCode: async (email) => {
+    set({ busy: true })
+    try {
+      return await window.api.cloud.requestCode(email)
+    } catch (error) {
+      toast.error(error)
+      return null
+    } finally {
+      set({ busy: false })
+    }
+  },
+
+  verifyCode: async (email, code) => {
+    set({ busy: true })
+    try {
+      set({ status: await window.api.cloud.verifyCode({ email, code }) })
       toast.success('Conectado a nuvem.')
       return true
     } catch (error) {

@@ -25,6 +25,10 @@ export default defineWorkersConfig({
           // o secret não vem do wrangler.jsonc; nos testes é um valor fixo
           bindings: {
             JWT_SECRET: 'segredo-apenas-para-testes',
+            // sem caixa de e-mail nos testes: a API devolve o codigo gerado
+            LOGIN_CODE_DEBUG: 'true',
+            // a lista de producao so tem o e-mail do dono; aqui vale o do teste
+            ALLOWED_EMAILS: 'dono@exemplo.com',
             TEST_MIGRATIONS: migrations,
           },
         },

@@ -19,7 +19,10 @@
     "REFRESH_TOKEN_TTL_SECONDS": "2592000",
     // Validade do link assinado de streaming. Curto: a TV pede um novo a cada
     // reprodução, e um link vazado morre rápido.
-    "STREAM_TOKEN_TTL_SECONDS": "21600"
+    "STREAM_TOKEN_TTL_SECONDS": "21600",
+    "LOGIN_CODE_TTL_SECONDS": "600",
+    "EMAIL_FROM": "onboarding@resend.dev",
+    "ALLOWED_EMAILS": "rafael30011@gmail.com"
   },
 
   "d1_databases": [

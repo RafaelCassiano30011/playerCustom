@@ -33,7 +33,8 @@ mandar header de autorização. Detalhes, endpoints e decisões estão em
 
 ### Como o player usa
 
-Entre com e-mail e senha em **Ajustes › Biblioteca na nuvem**. A sessão fica em
+Clique em **Entrar na nuvem**, no pé da barra lateral: você digita o e-mail e
+recebe um código de 6 dígitos. Não existe senha no player. A sessão fica em
 `cloud-session.json`, cifrada pelo `safeStorage` do sistema (DPAPI no Windows).
 
 - **Enviar**: com a sessão ativa, o botão *Enviar para a nuvem* na barra de

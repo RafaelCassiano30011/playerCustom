@@ -21,6 +21,7 @@ export async function resetDb(): Promise<void> {
     'files',
     'collections',
     'refresh_tokens',
+    'login_codes',
     'users',
   ];
   for (const t of tabelas) {

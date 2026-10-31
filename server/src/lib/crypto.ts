@@ -21,6 +21,28 @@ export function randomToken(bytes = 32): string {
   return randomId(bytes);
 }
 
+/**
+ * Codigo numerico de uso unico.
+ *
+ * Sorteia byte a byte descartando o que cairia fora do multiplo de 10 mais
+ * alto: `% 10` direto num byte faria 0..5 sairem com mais frequencia que
+ * 6..9, e codigo previsivel e codigo adivinhavel.
+ */
+export function randomNumericCode(digitos = 6): string {
+  const limite = 250; // maior multiplo de 10 que cabe em um byte
+  let codigo = '';
+  const buf = new Uint8Array(digitos * 2);
+  while (codigo.length < digitos) {
+    crypto.getRandomValues(buf);
+    for (const b of buf) {
+      if (b >= limite) continue;
+      codigo += (b % 10).toString();
+      if (codigo.length === digitos) break;
+    }
+  }
+  return codigo;
+}
+
 function toHex(buffer: ArrayBuffer): string {
   return [...new Uint8Array(buffer)]
     .map((b) => b.toString(16).padStart(2, '0'))
